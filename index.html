@@ -1,13 +1,56 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>campus-navi</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Campus Navi </title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+<div class="w-full max-w-xs bg-white rounded-3xl shadow-xl overflow-hidden">
+
+  
+  <div class="bg-gradient-to-b from-[#8B0000] to-[#5A0000] h-72 flex flex-col justify-start pt-10">
+    <div class="flex justify-center mt-8">
+      <img src="pic.jpeg" class="w-28 h-28 rounded-full bg-white p-2 shadow-lg">
+    </div>
+  </div>
+
+
+  <div class="rounded-t-3xl -mt-10 pt-10 pb-8 px-6 bg-gradient-to-b from-[#f8f8f8] via-[#dcdcdc] to-[#b3b3b3] shadow-inner">
+
+
+    <h1 class="text-center text-3xl font-serif font-bold mb-6">Log in</h1>
+
+   
+    <div class="mb-4">
+      <div class="flex items-center bg-[#dce8f3] px-3 py-3 rounded-lg">
+        <img src="user.png" class="w-5 mr-2 opacity-70">
+        <input type="text" placeholder="Username:" class="w-full bg-transparent outline-none text-gray-700">
+      </div>
+    </div>
+
+ 
+    <div class="mb-6">
+      <div class="flex items-center bg-[#dce8f3] px-3 py-3 rounded-lg">
+        <img src="lok.png" class="w-5 mr-2 opacity-70">
+        <input type="password" placeholder="Password:" class="w-full bg-transparent outline-none text-gray-700">
+      </div>
+    </div>
+
+    <button class="w-full bg-[#8B0000] hover:bg-[#5A0000] text-white py-2.5 rounded-lg font-semibold">
+      Log in
+    </button>
+
+    <p class="text-center text-sm mt-5">
+      Don’t Have an Account?
+      <a href="signup.html" class="text-[#8B0000] font-semibold">Sign up</a>
+    </p>
+
+  </div>
+</div>
+
+</body>
 </html>
