@@ -8,6 +8,7 @@ const AdminPanel = ({ onNavigate, user }) => {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [databaseError, setDatabaseError] = useState('');
 
   // Form states
   const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
@@ -47,25 +48,43 @@ const AdminPanel = ({ onNavigate, user }) => {
     }
     
     try {
+      console.log('Checking admin status for user:', user.id);
+      
+      // Use supabase client with proper error handling
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();  // Changed from .single() to .maybeSingle()
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error checking admin status:', error);
+      console.log('Admin check result:', { data, error });
+
+      if (error) {
+        console.error('Admin check error:', error);
+        setDatabaseError('Database error: ' + error.message);
+        
+        // If 406 error, table likely doesn't exist or has RLS issues
+        if (error.code === '406' || error.message.includes('406')) {
+          setDatabaseError('Database configuration issue. The user_roles table may not exist or has permission issues.');
+        }
+        setIsAdmin(false);
+        setLoading(false);
+        return;
       }
 
       if (data && data.role === 'admin') {
+        console.log('User is admin, fetching data...');
         setIsAdmin(true);
+        setDatabaseError('');
         fetchAllData();
       } else {
+        console.log('User is not admin or no role found');
         setIsAdmin(false);
         setLoading(false);
       }
     } catch (error) {
       console.error('Error checking admin status:', error);
+      setDatabaseError('Unexpected error: ' + error.message);
       setIsAdmin(false);
       setLoading(false);
     }
@@ -73,7 +92,10 @@ const AdminPanel = ({ onNavigate, user }) => {
 
   const fetchAllData = async () => {
     try {
+      setLoading(true);
+      
       // Fetch announcements
+      console.log('Fetching announcements...');
       const { data: announcementsData, error: announcementsError } = await supabase
         .from('announcements')
         .select('*')
@@ -81,9 +103,13 @@ const AdminPanel = ({ onNavigate, user }) => {
 
       if (announcementsError) {
         console.error('Error fetching announcements:', announcementsError);
+        setDatabaseError(prev => prev + '\nAnnouncements error: ' + announcementsError.message);
+      } else {
+        console.log('Announcements fetched:', announcementsData?.length || 0);
       }
 
       // Fetch events
+      console.log('Fetching events...');
       const { data: eventsData, error: eventsError } = await supabase
         .from('events')
         .select('*')
@@ -91,13 +117,17 @@ const AdminPanel = ({ onNavigate, user }) => {
 
       if (eventsError) {
         console.error('Error fetching events:', eventsError);
+        setDatabaseError(prev => prev + '\nEvents error: ' + eventsError.message);
+      } else {
+        console.log('Events fetched:', eventsData?.length || 0);
       }
 
       setAnnouncements(announcementsData || []);
       setEvents(eventsData || []);
+      setLoading(false);
     } catch (error) {
       console.error('Error fetching admin data:', error);
-    } finally {
+      setDatabaseError('Fetch error: ' + error.message);
       setLoading(false);
     }
   };
@@ -244,15 +274,37 @@ const AdminPanel = ({ onNavigate, user }) => {
             <Shield className="text-[#601214]" size={32} />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
-          <p className="text-gray-600 mb-6">
-            You don't have administrator privileges to access this panel.
+          
+          {databaseError && (
+            <div className="mb-4 p-3 bg-yellow-100 border border-yellow-300 text-yellow-800 rounded-lg text-sm text-left">
+              <p className="font-semibold">Database Issue:</p>
+              <p className="text-xs mt-1">{databaseError}</p>
+            </div>
+          )}
+          
+          <p className="text-gray-600 mb-4">
+            {databaseError 
+              ? 'There seems to be a database configuration issue.'
+              : 'You don\'t have administrator privileges to access this panel.'}
           </p>
-          <button
-            onClick={() => onNavigate('login')}
-            className="bg-gradient-to-br from-[#601214] to-[#8b1a1d] text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all duration-200"
-          >
-            Return to Login
-          </button>
+          
+          <div className="space-y-3">
+            <button
+              onClick={() => onNavigate('map')}
+              className="w-full bg-gradient-to-br from-[#601214] to-[#8b1a1d] text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all duration-200"
+            >
+              Return to Campus Map
+            </button>
+            
+            {databaseError && (
+              <button
+                onClick={checkAdminStatus}
+                className="w-full bg-blue-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-600 transition-all duration-200"
+              >
+                Retry Admin Check
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -264,6 +316,9 @@ const AdminPanel = ({ onNavigate, user }) => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#601214] mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading admin panel...</p>
+          {databaseError && (
+            <p className="mt-2 text-sm text-red-600 max-w-md">{databaseError}</p>
+          )}
         </div>
       </div>
     );
@@ -428,6 +483,9 @@ const AdminPanel = ({ onNavigate, user }) => {
                 <div className="text-center py-12">
                   <Bell className="text-gray-300 mx-auto mb-3" size={48} />
                   <p className="text-gray-500">No announcements yet</p>
+                  {databaseError && (
+                    <p className="text-sm text-red-600 mt-2">{databaseError}</p>
+                  )}
                 </div>
               ) : (
                 <div className="divide-y divide-gray-200/50">
@@ -604,6 +662,9 @@ const AdminPanel = ({ onNavigate, user }) => {
                 <div className="text-center py-12">
                   <Calendar className="text-gray-300 mx-auto mb-3" size={48} />
                   <p className="text-gray-500">No events yet</p>
+                  {databaseError && (
+                    <p className="text-sm text-red-600 mt-2">{databaseError}</p>
+                  )}
                 </div>
               ) : (
                 <div className="divide-y divide-gray-200/50">
@@ -667,6 +728,13 @@ const AdminPanel = ({ onNavigate, user }) => {
         {activeTab === 'analytics' && (
           <div className="space-y-6 animate-enter">
             <h2 className="text-xl font-bold text-gray-900">System Analytics</h2>
+            
+            {databaseError && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                <p className="text-yellow-800 text-sm">{databaseError}</p>
+              </div>
+            )}
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="bg-white/80 backdrop-blur-md rounded-2xl p-6 shadow-lg border border-gray-200/50">
                 <div className="flex items-center gap-3">

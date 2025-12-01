@@ -7,6 +7,13 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    storage: localStorage,
+    storageKey: 'supabase.auth.token'
   }
 })
+
+// Add global error listener
+supabase.auth.onAuthStateChange((event, session) => {
+  console.log('Auth event:', event, session ? 'User logged in' : 'No user');
+});

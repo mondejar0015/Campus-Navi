@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MapPin, Mail, Lock, ArrowRight, Shield } from 'lucide-react';
+import { MapPin, Mail, Lock, ArrowRight } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 
 const Login = ({ onNavigate, onLoginSuccess }) => {
@@ -41,8 +41,6 @@ const Login = ({ onNavigate, onLoginSuccess }) => {
         if (onLoginSuccess) {
           await onLoginSuccess();
         }
-        // Note: We don't set loading(false) here because the App.jsx 
-        // will unmount this component when it switches to 'map'.
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -121,19 +119,8 @@ const Login = ({ onNavigate, onLoginSuccess }) => {
             Create Account
           </button>
         </div>
-
-        <div className="mt-8 pt-6 border-t border-gray-200">
-          <div className="text-center">
-            <p className="text-gray-500 text-sm mb-3">Administrator Access</p>
-            <button 
-              onClick={() => onNavigate('admin-login')}
-              className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold py-3 rounded-xl shadow-lg shadow-purple-900/20 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center"
-            >
-              <Shield className="w-4 h-4 mr-2" />
-              Admin Portal
-            </button>
-          </div>
-        </div>
+        
+        {/* Removed Admin Portal Section */}
       </div>
     </div>
   );

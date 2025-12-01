@@ -10,62 +10,68 @@ const Signup = ({ onNavigate, onSignupSuccess }) => {
     confirmPassword: ''
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
     });
+    setError('');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!formData.email || !formData.username || !formData.password || !formData.confirmPassword) {
-      alert('Please fill in all fields');
+      setError('Please fill in all fields');
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      alert('Passwords do not match');
+      setError('Passwords do not match');
       return;
     }
 
     if (formData.password.length < 6) {
-      alert('Password must be at least 6 characters long');
+      setError('Password must be at least 6 characters long');
       return;
     }
 
     setLoading(true);
+    setError('');
     
     try {
-      // Sign up with Supabase Auth
-      const { data, error } = await supabase.auth.signUp({
+      // ONLY do auth signup - let the database trigger handle the rest
+      const { data, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
           data: {
             username: formData.username.toLowerCase(),
-            full_name: formData.username,
-            role: 'student' // Default role for regular signups
+            full_name: formData.username
           }
         }
       });
 
-      if (error) {
-        alert('Signup error: ' + error.message);
+      if (authError) {
+        console.error('Signup error details:', authError);
+        setError('Signup error: ' + authError.message);
         setLoading(false);
         return;
       }
 
       if (data?.user) {
-        // Success - call the success handler
-        onSignupSuccess();
+        console.log('User created successfully:', data.user.id);
+        
+        // Wait a moment for the database trigger to run
+        setTimeout(() => {
+          onSignupSuccess();
+        }, 1000);
       }
     } catch (error) {
-      console.error('Signup error:', error);
-      alert('An unexpected error occurred during signup.');
-    } finally {
+      console.error('Unexpected signup error:', error);
+      setError('An unexpected error occurred. Please try again.');
       setLoading(false);
     }
   };
@@ -99,6 +105,12 @@ const Signup = ({ onNavigate, onSignupSuccess }) => {
         
         <h1 className="text-4xl font-bold text-gray-900 mb-8 text-center">Create Account</h1>
         
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
+        
         <div className="space-y-4 max-w-md mx-auto w-full">
           {/* Email Field */}
           <div className="bg-white rounded-2xl p-1 shadow-sm border border-gray-200 focus-within:border-[#601214] focus-within:ring-1 focus-within:ring-[#601214] transition-all relative">
@@ -125,6 +137,7 @@ const Signup = ({ onNavigate, onSignupSuccess }) => {
               className="w-full bg-transparent pl-12 pr-4 py-3 text-gray-800 placeholder-gray-400 focus:outline-none"
               placeholder="Username"
               required
+              minLength="3"
             />
           </div>
           
@@ -139,6 +152,7 @@ const Signup = ({ onNavigate, onSignupSuccess }) => {
               className="w-full bg-transparent pl-12 pr-4 py-3 text-gray-800 placeholder-gray-400 focus:outline-none"
               placeholder="Create Password"
               required
+              minLength="6"
             />
           </div>
 
@@ -153,12 +167,13 @@ const Signup = ({ onNavigate, onSignupSuccess }) => {
               className="w-full bg-transparent pl-12 pr-4 py-3 text-gray-800 placeholder-gray-400 focus:outline-none"
               placeholder="Confirm Password"
               required
+              minLength="6"
             />
           </div>
 
           <button 
             type="submit"
-            className="w-full bg-[#601214] text-white font-bold py-4 rounded-xl shadow-lg shadow-red-900/20 hover:bg-[#4a0d0e] hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 mt-6"
+            className="w-full bg-[#601214] text-white font-bold py-4 rounded-xl shadow-lg shadow-red-900/20 hover:bg-[#4a0d0e] hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={loading}
           >
             {loading ? 'Creating Account...' : 'Create Account'}

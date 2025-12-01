@@ -9,7 +9,6 @@ import Announcements from './components/Announcements';
 import Schedule from './components/Schedule';
 import Loading from './components/Loading';
 import AdminPanel from './componentsAdmin/AdminPanel';
-import AdminLogin from './componentsAdmin/AdminLogin';
 
 export default function App() {
   const [currentView, setCurrentView] = useState('loading');
@@ -17,12 +16,50 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const initComplete = useRef(false);
 
-  // Buildings data
-  const [buildings, setBuildings] = useState([
-    // ... your existing buildings data
+  // Buildings data - moved outside of checkSession function
+  const [buildings] = useState([
+    // Academic Zone
+    { id: 'CCS', name: 'College of Computer Studies', type: 'academic', color: '#1e40af' },
+    { id: 'SCI', name: 'Science Labs', type: 'science', color: '#7c3aed' },
+    { id: 'CBA', name: 'College of Business Administration', type: 'academic', color: '#1e40af' },
+    { id: 'CED', name: 'College of Education', type: 'academic', color: '#1e40af' },
+    { id: 'ENG', name: 'Engineering Building', type: 'academic', color: '#1e40af' },
+    { id: 'MATH', name: 'Mathematics Building', type: 'academic', color: '#1e40af' },
+    
+    // Student Life Zone
+    { id: 'STUD', name: 'Student Center', type: 'student', color: '#dc2626' },
+    { id: 'CAF', name: 'Cafeteria', type: 'cafeteria', color: '#ea580c' },
+    { id: 'LIB', name: 'Main Library', type: 'library', color: '#2563eb' },
+    { id: 'BOOK', name: 'Bookstore', type: 'store', color: '#dc2626' },
+    
+    // Sports Zone
+    { id: 'GYM', name: 'Gymnasium', type: 'gym', color: '#dc2626' },
+    { id: 'FIELD', name: 'Sports Field', type: 'sports', color: '#16a34a' },
+    { id: 'POOL', name: 'Swimming Pool', type: 'sports', color: '#0891b2' },
+    { id: 'TENNIS', name: 'Tennis Courts', type: 'sports', color: '#16a34a' },
+    
+    // Admin Zone
+    { id: 'ADMIN', name: 'Administration', type: 'admin', color: '#7e22ce' },
+    { id: 'MED', name: 'Medical Clinic', type: 'medical', color: '#dc2626' },
+    { id: 'SEC', name: 'Security', type: 'admin', color: '#7e22ce' },
+    
+    // Residential Zone
+    { id: 'DORM1', name: 'North Dormitory', type: 'dorm', color: '#ea580c' },
+    { id: 'DORM2', name: 'South Dormitory', type: 'dorm', color: '#ea580c' },
+    { id: 'DORM3', name: 'East Dormitory', type: 'dorm', color: '#ea580c' },
+    
+    // Arts Zone
+    { id: 'ART', name: 'Art Studio', type: 'arts', color: '#db2777' },
+    { id: 'MUSIC', name: 'Music Hall', type: 'arts', color: '#db2777' },
+    { id: 'THEA', name: 'Theater', type: 'arts', color: '#db2777' },
+    
+    // Additional Buildings
+    { id: 'PARK', name: 'Parking Lot', type: 'parking', color: '#6b7280' },
+    { id: 'CHAP', name: 'Chapel', type: 'religious', color: '#d97706' },
+    { id: 'RES', name: 'Research Center', type: 'science', color: '#7c3aed' }
   ]);
 
-  // Enhanced session check
+  // Enhanced session check with proper error handling
   const checkSession = async () => {
     try {
       console.log('🔍 Checking session...');
@@ -44,18 +81,55 @@ export default function App() {
 
       console.log('✅ Session found for:', session.user.email);
       
-      // Create basic user object
+      // Get user role from database with PROPER error handling
+      let userRole = 'student';
+      try {
+        // Use supabase client directly, not fetch API
+        const { data: roleData, error: roleError } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('id', session.user.id)
+          .maybeSingle(); // Use maybeSingle instead of single to handle no rows
+
+        console.log('Role query result:', { roleData, roleError });
+
+        if (roleError) {
+          console.warn('Role query error:', roleError);
+          
+          // Check if it's a 406 error (table doesn't exist or RLS issue)
+          if (roleError.code === '406' || roleError.message.includes('406')) {
+            console.log('Table or permission issue detected, creating user_roles table if needed');
+            
+            // Try to create table via function call or use service role
+            await createUserRoleEntry(session.user.id);
+            userRole = 'student';
+          }
+        } else if (roleData) {
+          userRole = roleData.role || 'student';
+        } else {
+          console.log('No role found, creating default student role');
+          await createUserRoleEntry(session.user.id);
+          userRole = 'student';
+        }
+      } catch (roleErr) {
+        console.warn('Role check exception:', roleErr);
+        userRole = 'student';
+      }
+      
+      // Create user object
       const basicUser = {
         ...session.user,
-        username: session.user.email?.split('@')[0] || 'user',
+        username: session.user.user_metadata?.username || 
+                 session.user.email?.split('@')[0] || 'user',
         full_name: session.user.user_metadata?.full_name || '',
-        role: session.user.user_metadata?.role || 'student'
+        role: userRole
       };
 
+      console.log('User object created:', basicUser);
       setUser(basicUser);
       
       // Navigate based on role
-      if (basicUser.role === 'admin') {
+      if (userRole === 'admin') {
         console.log('🚀 Redirecting to admin panel');
         setCurrentView('admin');
       } else {
@@ -73,16 +147,61 @@ export default function App() {
     }
   };
 
+  // Helper function to create user role entry
+  const createUserRoleEntry = async (userId) => {
+    try {
+      // First check if user_roles table exists by trying to insert
+      const { error } = await supabase
+        .from('user_roles')
+        .upsert({
+          id: userId,
+          role: 'student',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'id'
+        });
+
+      if (error) {
+        console.warn('Could not create user role entry:', error);
+        
+        // If table doesn't exist, we need to create it
+        if (error.code === '42P01' || error.message.includes('does not exist')) {
+          console.log('user_roles table does not exist. Please run the SQL script to create it.');
+          return false;
+        }
+      }
+      return true;
+    } catch (err) {
+      console.warn('createUserRoleEntry error:', err);
+      return false;
+    }
+  };
+
+  // Initialize user_roles table on app start
+  const initializeDatabase = async () => {
+    try {
+      // Try to create user_roles table if it doesn't exist
+      // Remove the RPC call since it doesn't exist
+      console.log('Skipping database function - not needed');
+    } catch (err) {
+      console.log('Database initialization skipped:', err.message);
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
+
+    // Initialize database first
+    initializeDatabase();
 
     // Quick session check with shorter timeout
     const timeoutId = setTimeout(() => {
       if (mounted && isLoading) {
         console.log('⏰ Session check timeout - checking session state');
-        checkSession(); // Re-check instead of forcing login
+        checkSession();
       }
-    }, 3000); // Reduced timeout
+    }, 3000);
 
     // Initial session check
     checkSession();
@@ -146,8 +265,6 @@ export default function App() {
         return <Login onNavigate={setCurrentView} onLoginSuccess={handleLoginSuccess} />;
       case 'signup': 
         return <Signup onNavigate={setCurrentView} onSignupSuccess={handleSignupSuccess} />;
-      case 'admin-login': 
-        return <AdminLogin onNavigate={setCurrentView} onAdminLoginSuccess={handleLoginSuccess} />;
       case 'map': 
         return <CampusMap onNavigate={setCurrentView} user={user} buildings={buildings} onLogout={handleLogout} />;
       case 'info': 
