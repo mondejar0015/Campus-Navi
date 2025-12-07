@@ -288,3 +288,134 @@ export default function App() {
     </div>
   );
 }
+
+// public/sw.js - Production-ready service worker with offline support
+const CACHE_NAME = 'campus-navi-v1';
+const STATIC_CACHE = 'static-v1';
+const DYNAMIC_CACHE = 'dynamic-v1';
+
+// Essential assets to cache on install
+const staticAssets = [
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/Logo.svg',
+  '/offline.html'
+];
+
+// Install - Cache all static assets
+self.addEventListener('install', async (event) => {
+  console.log('Service Worker: Installing...');
+  
+  event.waitUntil(
+    caches.open(STATIC_CACHE).then(cache => {
+      console.log('Service Worker: Caching static assets');
+      return cache.addAll(staticAssets);
+    }).then(() => {
+      // Force the waiting service worker to become the active service worker
+      self.skipWaiting();
+    })
+  );
+});
+
+// Activate - Clean up old caches
+self.addEventListener('activate', async (event) => {
+  console.log('Service Worker: Activating');
+  
+  event.waitUntil(
+    caches.keys().then(cacheKeys => {
+      return Promise.all(
+        cacheKeys.map(key => {
+          if (key !== STATIC_CACHE && key !== DYNAMIC_CACHE) {
+            console.log('Service Worker: Removing old cache', key);
+            return caches.delete(key);
+          }
+        })
+      );
+    }).then(() => {
+      // Take control of all clients immediately
+      return self.clients.claim();
+    })
+  );
+});
+
+// Fetch - Network first, fall back to cache
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  const url = new URL(request.url);
+  
+  // Skip cross-origin requests
+  if (url.origin !== location.origin) {
+    return;
+  }
+  
+  // For API requests - network first
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(networkFirst(request));
+  }
+  // For navigation requests (HTML) - network first with fallback
+  else if (request.mode === 'navigate') {
+    event.respondWith(networkFirst(request));
+  }
+  // For static assets - cache first with network fallback
+  else {
+    event.respondWith(cacheFirst(request));
+  }
+});
+
+async function cacheFirst(request) {
+  try {
+    const cached = await caches.match(request);
+    if (cached) {
+      return cached;
+    }
+    
+    const response = await fetch(request);
+    
+    // Cache successful responses
+    if (response && response.status === 200) {
+      const cache = await caches.open(DYNAMIC_CACHE);
+      cache.put(request, response.clone());
+    }
+    
+    return response;
+  } catch (error) {
+    console.log('Cache first failed, returning offline page:', error);
+    // Return cached asset or offline page
+    const cached = await caches.match(request);
+    if (cached) {
+      return cached;
+    }
+    return caches.match('/offline.html');
+  }
+}
+
+async function networkFirst(request) {
+  const cache = await caches.open(DYNAMIC_CACHE);
+  
+  try {
+    const response = await fetch(request);
+    
+    // Cache successful responses
+    if (response && response.status === 200) {
+      cache.put(request, response.clone());
+    }
+    
+    return response;
+  } catch (error) {
+    console.log('Network request failed, checking cache:', error);
+    
+    // Fall back to cached version
+    const cached = await cache.match(request);
+    if (cached) {
+      return cached;
+    }
+    
+    // Return offline page for navigation requests
+    if (request.mode === 'navigate') {
+      return caches.match('/index.html') || caches.match('/offline.html');
+    }
+    
+    throw error;
+  }
+}
