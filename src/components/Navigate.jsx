@@ -63,8 +63,8 @@ const Navigate = ({ onNavigate, buildings }) => {
     // Academic Zone
     { id: 'CCS', x: 100, y: 70, width: 70, height: 50, label: 'CCS', name: 'College of Computer Studies', type: 'academic', color: '#1e40af', zone: 'academic' },
     { id: 'SCI', x: 190, y: 70, width: 70, height: 50, label: 'SCI', name: 'Science Labs', type: 'science', color: '#7c3aed', zone: 'academic' },
-    { id: 'CBA', x: 100, y: 140, width: 70, height: 50, label: 'CBA', name: 'Business Admin', type: 'academic', color: '#1e40af', zone: 'academic' },
-    { id: 'CED', x: 190, y: 140, width: 70, height: 50, label: 'CED', name: 'Education', type: 'academic', color: '#1e40af', zone: 'academic' },
+    { id: 'CBA', x: 100, y: 140, width: 70, height: 50, label: 'CBA', name: 'College of Business Administration', type: 'academic', color: '#1e40af', zone: 'academic' },
+    { id: 'CED', x: 190, y: 140, width: 70, height: 50, label: 'CED', name: 'College of Education', type: 'academic', color: '#1e40af', zone: 'academic' },
     { id: 'ENG', x: 280, y: 70, width: 70, height: 50, label: 'ENG', name: 'Engineering', type: 'academic', color: '#1e40af', zone: 'academic' },
     { id: 'MATH', x: 280, y: 140, width: 70, height: 50, label: 'MATH', name: 'Mathematics', type: 'academic', color: '#1e40af', zone: 'academic' },
     
@@ -130,6 +130,42 @@ const Navigate = ({ onNavigate, buildings }) => {
     'Chapel': [{ x: 45, y: 375 }],
     'Research Center': [{ x: 105, y: 375 }]
   };
+
+  // Check for pre-selected destination from Info page
+  useEffect(() => {
+    // Check if there's a pre-selected destination from Info page
+    const savedDestination = localStorage.getItem('selectedDestination');
+    if (savedDestination) {
+      console.log('Found saved destination:', savedDestination);
+      setRoute(prev => ({ ...prev, destination: savedDestination }));
+      localStorage.removeItem('selectedDestination'); // Clear after use
+      
+      // Auto-select a start point if none is selected
+      if (!userPosition) {
+        const defaultStart = startPoints[0];
+        setUserPosition(defaultStart);
+        setRoute(prev => ({ ...prev, start: defaultStart.name }));
+      }
+    }
+  }, []);
+
+  // Initialize
+  useEffect(() => {
+    setAvailableStartPoints(startPoints);
+    
+    // Set default user position if not already set
+    if (!userPosition) {
+      const defaultPosition = startPoints[0];
+      setUserPosition(defaultPosition);
+      setRoute(prev => ({ ...prev, start: defaultPosition.name }));
+    }
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, []);
 
   // Utility functions
   const getDistance = (p1, p2) => Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
@@ -245,19 +281,6 @@ const Navigate = ({ onNavigate, buildings }) => {
 
     animationRef.current = requestAnimationFrame(animateMovement);
   };
-
-  // Initialize
-  useEffect(() => {
-    setAvailableStartPoints(startPoints);
-    setUserPosition(startPoints[0]);
-    setRoute(prev => ({ ...prev, start: startPoints[0].name }));
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, []);
 
   const handleInputChange = (field, value) => {
     const newRoute = {
@@ -475,11 +498,14 @@ const Navigate = ({ onNavigate, buildings }) => {
       <div className="bg-white/80 backdrop-blur-md px-6 pt-12 pb-6 flex items-center border-b border-gray-200/50 shadow-sm sticky top-0 z-20">
         <button 
           onClick={() => onNavigate('map')} 
-          className="p-2 -ml-2 mr-2 hover:bg-gray-100/80 rounded-full transition-all duration-200 text-gray-700"
+          className="p-2 -ml-2 mr-2 hover:bg-gray-100/80 rounded-full transition-all duration-200 text-gray-700 hover:scale-105"
         >
           <ChevronLeft size={24} />
         </button>
-        <h1 className="text-2xl font-bold text-gray-900">GPS Navigation</h1>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold text-gray-900">GPS Navigation</h1>
+          <p className="text-gray-500 text-sm">Step-by-step campus directions</p>
+        </div>
       </div>
 
       {/* Main Content */}
@@ -487,7 +513,7 @@ const Navigate = ({ onNavigate, buildings }) => {
         {/* Search Bar */}
         <div className="bg-white/80 backdrop-blur-md rounded-2xl p-4 shadow-sm border border-gray-200/50">
           <div className="flex items-center gap-3">
-            <div className="flex-1 bg-white rounded-xl h-14 px-4 flex items-center border border-gray-300/50 focus-within:border-[#601214] focus-within:ring-2 focus-within:ring-[#601214]/20 transition-all duration-200 shadow-sm">
+            <div className="flex-1 bg-white/90 rounded-xl h-14 px-4 flex items-center border border-gray-300/50 focus-within:border-[#601214] focus-within:ring-2 focus-within:ring-[#601214]/20 transition-all duration-200 shadow-sm">
               <Search className="w-5 h-5 text-gray-400 mr-3" />
               <input 
                 type="text" 
@@ -558,6 +584,12 @@ const Navigate = ({ onNavigate, buildings }) => {
                 </option>
               ))}
             </select>
+            {route.destination && (
+              <div className="mt-2 text-sm text-green-600 flex items-center gap-1">
+                <MapPin size={14} />
+                <span>Destination selected: {route.destination}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -565,7 +597,7 @@ const Navigate = ({ onNavigate, buildings }) => {
         {routeInfo && (
           <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 shadow-xl border border-gray-200/50 animate-enter delay-100">
             <div className="flex items-center gap-4 mb-4">
-              <div className="w-10 h-10 bg-[#601214] rounded-full flex items-center justify-center text-white">
+              <div className="w-10 h-10 bg-[#601214] rounded-full flex items-center justify-center text-white shadow-lg">
                 <Navigation2 size={24} fill="currentColor" />
               </div>
               <div>
@@ -598,7 +630,7 @@ const Navigate = ({ onNavigate, buildings }) => {
               {!isNavigating ? (
                   <button 
                       onClick={startNavigation} 
-                      className="w-full bg-green-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-green-900/20 hover:bg-green-600 hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2"
+                      className="w-full bg-gradient-to-br from-green-500 to-green-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-green-900/20 hover:bg-gradient-to-br hover:from-green-600 hover:to-green-700 hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2"
                       disabled={!route.destination || !userPosition}
                   >
                       <Navigation2 size={20} /> Start Navigation
@@ -606,7 +638,7 @@ const Navigate = ({ onNavigate, buildings }) => {
               ) : (
                   <button 
                       onClick={resetNavigation} 
-                      className="w-full bg-red-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-red-900/20 hover:bg-red-600 hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2"
+                      className="w-full bg-gradient-to-br from-red-500 to-red-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-red-900/20 hover:bg-gradient-to-br hover:from-red-600 hover:to-red-700 hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2"
                   >
                       <RotateCcw size={20} /> Reset Navigation
                   </button>
@@ -639,21 +671,21 @@ const Navigate = ({ onNavigate, buildings }) => {
                 {isPaused ? (
                   <button 
                     onClick={resumeNavigation} 
-                    className="flex-1 py-3 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
+                    className="flex-1 py-3 bg-gradient-to-br from-green-500 to-green-600 text-white rounded-xl font-bold hover:from-green-600 hover:to-green-700 transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
                   >
                     <Play size={20} /> Resume
                   </button>
                 ) : (
                   <button 
                     onClick={pauseNavigation} 
-                    className="flex-1 py-3 bg-yellow-500 text-white rounded-xl font-bold hover:bg-yellow-600 transition-all duration-200 flex items-center justify-center gap=2 shadow-md hover:shadow-lg"
+                    className="flex-1 py-3 bg-gradient-to-br from-yellow-500 to-yellow-600 text-white rounded-xl font-bold hover:from-yellow-600 hover:to-yellow-700 transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
                   >
                     <Pause size={20} /> Pause
                   </button>
                 )}
                 <button 
                     onClick={resetNavigation} 
-                    className="py-3 px-6 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
+                    className="py-3 px-6 bg-gradient-to-br from-red-500 to-red-600 text-white rounded-xl font-bold hover:from-red-600 hover:to-red-700 transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
                 >
                     <RotateCcw size={20} /> Stop
                 </button>
@@ -667,7 +699,7 @@ const Navigate = ({ onNavigate, buildings }) => {
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2.5">
                       <div 
-                          className="bg-blue-500 h-2.5 rounded-full transition-all duration-500 ease-linear" 
+                          className="bg-gradient-to-r from-blue-500 to-green-500 h-2.5 rounded-full transition-all duration-500 ease-linear" 
                           style={{ width: `${progress}%` }}
                       ></div>
                   </div>
@@ -705,7 +737,7 @@ const Navigate = ({ onNavigate, buildings }) => {
                 style={{ 
                   transform: `translate(${panX}px, ${panY}px) scale(${scale})`, 
                   transformOrigin: '0 0', 
-                  transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                  transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)' 
                 }} 
               >
                 <svg 

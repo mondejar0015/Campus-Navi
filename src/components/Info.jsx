@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { ChevronLeft, Search, SlidersHorizontal, ChevronRight, Building2, Clock, MapPin, Users, Wifi, BookOpen, Coffee, Dumbbell, FlaskRound, Trees, Shield } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronLeft, Search, SlidersHorizontal, ChevronRight, Building2, Clock, MapPin, Users, Wifi, BookOpen, Coffee, Dumbbell, FlaskRound, Trees, Shield, Navigation } from 'lucide-react';
 
 const Info = ({ onNavigate, buildings }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredBuildings, setFilteredBuildings] = useState(buildings);
+  const [filteredBuildings, setFilteredBuildings] = useState([]);
   const [selectedBuilding, setSelectedBuilding] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   // Enhanced building data with all buildings from CampusMap
   const enhancedBuildings = [
@@ -15,7 +16,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '7:00 AM - 9:00 PM',
       floors: 5,
       facilities: ['Computer Labs', 'Research Center', 'Faculty Offices', 'Student Lounge', 'Conference Rooms'],
-      type: 'academic'
+      type: 'academic',
+      zone: 'academic',
+      color: '#1e40af'
     },
     {
       name: 'Science Labs',
@@ -24,7 +27,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '7:00 AM - 8:00 PM',
       floors: 4,
       facilities: ['Research Labs', 'Equipment Rooms', 'Faculty Offices', 'Student Workspaces', 'Safety Stations'],
-      type: 'science'
+      type: 'science',
+      zone: 'academic',
+      color: '#7c3aed'
     },
     {
       name: 'College of Business Administration',
@@ -33,7 +38,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '7:00 AM - 9:00 PM',
       floors: 6,
       facilities: ['Trading Room', 'Case Rooms', 'Faculty Offices', 'Student Lounge', 'Career Center'],
-      type: 'academic'
+      type: 'academic',
+      zone: 'academic',
+      color: '#1e40af'
     },
     {
       name: 'College of Education',
@@ -42,7 +49,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '7:00 AM - 8:00 PM',
       floors: 4,
       facilities: ['Smart Classrooms', 'Observation Rooms', 'Curriculum Library', 'Faculty Offices', 'Seminar Hall'],
-      type: 'academic'
+      type: 'academic',
+      zone: 'academic',
+      color: '#1e40af'
     },
     {
       name: 'Engineering Building',
@@ -51,7 +60,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '7:00 AM - 10:00 PM',
       floors: 5,
       facilities: ['Engineering Labs', 'Design Studios', 'Workshop', 'Faculty Offices', 'Project Rooms'],
-      type: 'academic'
+      type: 'academic',
+      zone: 'academic',
+      color: '#1e40af'
     },
     {
       name: 'Mathematics Building',
@@ -60,7 +71,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '7:00 AM - 9:00 PM',
       floors: 4,
       facilities: ['Math Labs', 'Collaborative Spaces', 'Faculty Offices', 'Study Areas', 'Computer Lab'],
-      type: 'academic'
+      type: 'academic',
+      zone: 'academic',
+      color: '#1e40af'
     },
     {
       name: 'Student Center',
@@ -69,7 +82,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '8:00 AM - 11:00 PM',
       floors: 3,
       facilities: ['Food Court', 'Game Room', 'Meeting Rooms', 'Student Org Offices', 'Lounges'],
-      type: 'student'
+      type: 'student',
+      zone: 'student',
+      color: '#dc2626'
     },
     {
       name: 'Cafeteria',
@@ -78,7 +93,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '6:30 AM - 8:00 PM',
       floors: 2,
       facilities: ['Food Stations', 'Seating Areas', 'Vending Machines', 'Microwave Stations', 'Outdoor Terrace'],
-      type: 'cafeteria'
+      type: 'cafeteria',
+      zone: 'student',
+      color: '#ea580c'
     },
     {
       name: 'Main Library',
@@ -87,7 +104,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '6:00 AM - 10:00 PM',
       floors: 4,
       facilities: ['Reading Areas', 'Group Study Rooms', 'Computer Station', 'Printing Services', 'Quiet Zones'],
-      type: 'library'
+      type: 'library',
+      zone: 'student',
+      color: '#2563eb'
     },
     {
       name: 'Bookstore',
@@ -96,7 +115,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '9:00 AM - 6:00 PM',
       floors: 2,
       facilities: ['Textbooks', 'School Supplies', 'University Store', 'Coffee Corner', 'Study Guides'],
-      type: 'store'
+      type: 'store',
+      zone: 'student',
+      color: '#dc2626'
     },
     {
       name: 'Gymnasium',
@@ -105,7 +126,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '5:00 AM - 11:00 PM',
       floors: 2,
       facilities: ['Basketball Courts', 'Fitness Center', 'Locker Rooms', 'Climbing Wall', 'Swimming Pool'],
-      type: 'gym'
+      type: 'gym',
+      zone: 'sports',
+      color: '#dc2626'
     },
     {
       name: 'Sports Field',
@@ -114,7 +137,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '5:00 AM - 10:00 PM',
       floors: 1,
       facilities: ['Football Field', 'Track', 'Bleachers', 'Equipment Rental', 'Lighting System'],
-      type: 'sports'
+      type: 'sports',
+      zone: 'sports',
+      color: '#16a34a'
     },
     {
       name: 'Swimming Pool',
@@ -123,7 +148,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '6:00 AM - 9:00 PM',
       floors: 1,
       facilities: ['Olympic Pool', 'Diving Area', 'Locker Rooms', 'Swim Lessons', 'Aquatic Fitness'],
-      type: 'sports'
+      type: 'sports',
+      zone: 'sports',
+      color: '#0891b2'
     },
     {
       name: 'Tennis Courts',
@@ -132,7 +159,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '6:00 AM - 10:00 PM',
       floors: 1,
       facilities: ['Tennis Courts', 'Equipment Rental', 'Lighting', 'Seating Area', 'Pro Shop'],
-      type: 'sports'
+      type: 'sports',
+      zone: 'sports',
+      color: '#16a34a'
     },
     {
       name: 'Administration',
@@ -141,7 +170,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '8:00 AM - 5:00 PM',
       floors: 5,
       facilities: ['Registrar Office', 'Bursar', 'Student Affairs', 'HR Department', 'Meeting Rooms'],
-      type: 'admin'
+      type: 'admin',
+      zone: 'admin',
+      color: '#7e22ce'
     },
     {
       name: 'Medical Clinic',
@@ -150,7 +181,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '24/7 Emergency, 8AM-6PM Regular',
       floors: 3,
       facilities: ['Emergency Room', 'Consultation Rooms', 'Pharmacy', 'Laboratory', 'Wellness Center'],
-      type: 'medical'
+      type: 'medical',
+      zone: 'admin',
+      color: '#dc2626'
     },
     {
       name: 'Security Office',
@@ -159,7 +192,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '24/7',
       floors: 2,
       facilities: ['Security Operations', 'Emergency Response', 'Lost & Found', 'Safety Resources', 'Parking Enforcement'],
-      type: 'admin'
+      type: 'admin',
+      zone: 'admin',
+      color: '#7e22ce'
     },
     {
       name: 'North Dormitory',
@@ -168,7 +203,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '24/7 with Access Control',
       floors: 8,
       facilities: ['Student Rooms', 'Study Lounges', 'Common Kitchen', 'Laundry', 'Recreation Room'],
-      type: 'dorm'
+      type: 'dorm',
+      zone: 'residential',
+      color: '#ea580c'
     },
     {
       name: 'South Dormitory',
@@ -177,7 +214,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '24/7 with Access Control',
       floors: 6,
       facilities: ['Student Rooms', 'Study Areas', 'Community Kitchen', 'Laundry', 'Game Room'],
-      type: 'dorm'
+      type: 'dorm',
+      zone: 'residential',
+      color: '#ea580c'
     },
     {
       name: 'East Dormitory',
@@ -186,7 +225,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '24/7 with Access Control',
       floors: 7,
       facilities: ['Student Rooms', 'Study Spaces', 'Common Areas', 'Laundry', 'Fitness Corner'],
-      type: 'dorm'
+      type: 'dorm',
+      zone: 'residential',
+      color: '#ea580c'
     },
     {
       name: 'Art Studio',
@@ -195,7 +236,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '8:00 AM - 10:00 PM',
       floors: 3,
       facilities: ['Painting Studio', 'Sculpture Room', 'Digital Lab', 'Gallery Space', 'Art Storage'],
-      type: 'arts'
+      type: 'arts',
+      zone: 'arts',
+      color: '#db2777'
     },
     {
       name: 'Music Hall',
@@ -204,7 +247,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '7:00 AM - 11:00 PM',
       floors: 4,
       facilities: ['Practice Rooms', 'Concert Hall', 'Recording Studio', 'Music Library', 'Instrument Storage'],
-      type: 'arts'
+      type: 'arts',
+      zone: 'arts',
+      color: '#db2777'
     },
     {
       name: 'Theater',
@@ -213,7 +258,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '9:00 AM - 11:00 PM',
       floors: 3,
       facilities: ['Main Stage', 'Rehearsal Rooms', 'Costume Shop', 'Scene Shop', 'Box Office'],
-      type: 'arts'
+      type: 'arts',
+      zone: 'arts',
+      color: '#db2777'
     },
     {
       name: 'Parking Lot',
@@ -222,7 +269,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '24/7',
       floors: 1,
       facilities: ['Parking Spaces', 'EV Charging', 'Security Patrol', 'Payment Kiosks', 'Accessible Parking'],
-      type: 'parking'
+      type: 'parking',
+      zone: 'student',
+      color: '#6b7280'
     },
     {
       name: 'Chapel',
@@ -231,7 +280,9 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '6:00 AM - 10:00 PM',
       floors: 2,
       facilities: ['Main Chapel', 'Meditation Room', 'Meeting Spaces', 'Religious Resources', 'Community Area'],
-      type: 'religious'
+      type: 'religious',
+      zone: 'student',
+      color: '#d97706'
     },
     {
       name: 'Research Center',
@@ -240,9 +291,16 @@ const Info = ({ onNavigate, buildings }) => {
       hours: '24/7 Access for Researchers',
       floors: 5,
       facilities: ['Research Labs', 'Collaborative Spaces', 'Conference Rooms', 'Equipment Center', 'Data Lab'],
-      type: 'science'
+      type: 'science',
+      zone: 'academic',
+      color: '#7c3aed'
     }
   ];
+
+  // Initialize filtered buildings on component mount
+  useEffect(() => {
+    setFilteredBuildings(enhancedBuildings);
+  }, []);
 
   const handleSearch = (e) => {
     const term = e.target.value.toLowerCase();
@@ -255,13 +313,15 @@ const Info = ({ onNavigate, buildings }) => {
         building.name.toLowerCase().includes(term) || 
         building.code.toLowerCase().includes(term) ||
         building.desc.toLowerCase().includes(term) ||
-        building.type.toLowerCase().includes(term)
+        building.type.toLowerCase().includes(term) ||
+        building.zone.toLowerCase().includes(term)
       );
       setFilteredBuildings(filtered);
     }
   };
 
   const handleBuildingClick = (building) => {
+    console.log('Building clicked:', building);
     setSelectedBuilding(building);
   };
 
@@ -269,9 +329,12 @@ const Info = ({ onNavigate, buildings }) => {
     setSelectedBuilding(null);
   };
 
-  const handleNavigateToBuilding = (building) => {
-    onNavigate('navigate');
-    // You could pass the building data to navigate component
+  const handleNavigateToBuilding = () => {
+    if (selectedBuilding) {
+      // Store the building data to pass to navigate
+      localStorage.setItem('selectedDestination', selectedBuilding.name);
+      onNavigate('navigate');
+    }
   };
 
   const getBuildingIcon = (type) => {
@@ -312,31 +375,44 @@ const Info = ({ onNavigate, buildings }) => {
     }
   };
 
+  // Prevent accidental clicks on the list items
+  const handleBuildingItemClick = (e, building) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handleBuildingClick(building);
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex flex-col">
       {/* Header */}
-      <div className="bg-white px-6 pt-12 pb-6 flex items-center border-b border-gray-100 sticky top-0 z-20">
-        <button onClick={() => onNavigate('map')} className="p-2 -ml-2 mr-2 hover:bg-gray-100 rounded-full transition-colors text-gray-700">
+      <div className="bg-white/80 backdrop-blur-md px-6 pt-12 pb-6 flex items-center border-b border-gray-200/50 sticky top-0 z-20 shadow-sm">
+        <button 
+          onClick={() => onNavigate('map')} 
+          className="p-2 -ml-2 mr-2 hover:bg-gray-100/80 rounded-full transition-all duration-200 text-gray-700 hover:scale-105"
+        >
           <ChevronLeft size={24} />
         </button>
-        <h1 className="text-2xl font-bold text-gray-900">Building Information</h1>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold text-gray-900">Building Information</h1>
+          <p className="text-gray-500 text-sm">Detailed campus building guide</p>
+        </div>
       </div>
 
       {/* Main Content */}
       <div className="flex-1 p-6">
         {/* Search Bar */}
         <div className="flex gap-3 mb-8 animate-enter">
-          <div className="flex-1 bg-white rounded-xl h-14 px-4 flex items-center shadow-sm border border-gray-200 focus-within:border-[#601214] focus-within:ring-1 focus-within:ring-[#601214] transition-all">
+          <div className="flex-1 bg-white/80 backdrop-blur-md rounded-xl h-14 px-4 flex items-center shadow-sm border border-gray-300/50 focus-within:border-[#601214] focus-within:ring-2 focus-within:ring-[#601214]/20 transition-all">
             <Search className="w-5 h-5 text-gray-400 mr-3" />
             <input 
               type="text" 
               placeholder="Search buildings, facilities, or departments..." 
               value={searchTerm}
               onChange={handleSearch}
-              className="w-full bg-transparent text-gray-900 placeholder-gray-400 outline-none font-medium" 
+              className="w-full bg-transparent text-gray-900 placeholder-gray-500 outline-none font-medium" 
             />
           </div>
-          <button className="bg-white rounded-xl w-14 h-14 flex items-center justify-center shadow-sm border border-gray-200 hover:bg-gray-50 active:scale-95 transition-all text-gray-600">
+          <button className="bg-white/80 backdrop-blur-md rounded-xl w-14 h-14 flex items-center justify-center shadow-sm border border-gray-300/50 hover:bg-gray-100/80 active:scale-95 transition-all text-gray-600">
             <SlidersHorizontal className="w-5 h-5" />
           </button>
         </div>
@@ -347,34 +423,44 @@ const Info = ({ onNavigate, buildings }) => {
           <div className="animate-enter">
             <button 
               onClick={closeDetails}
-              className="flex items-center gap-2 text-[#601214] font-semibold mb-6 hover:underline"
+              className="flex items-center gap-2 text-[#601214] font-semibold mb-6 hover:underline hover:text-[#4a0d0e] transition-colors"
             >
               <ChevronLeft size={20} />
               Back to List
             </button>
 
-            <div className="bg-white rounded-3xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100">
+            <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 shadow-xl border border-gray-200/50">
               <div className="flex items-start justify-between mb-6">
                 <div className="flex items-center gap-4">
-                  <div className="p-3 rounded-2xl text-white" style={{ backgroundColor: getTypeColor(selectedBuilding.type) }}>
+                  <div 
+                    className="p-3 rounded-2xl text-white shadow-lg" 
+                    style={{ backgroundColor: getTypeColor(selectedBuilding.type) }}
+                  >
                     {getBuildingIcon(selectedBuilding.type)}
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">{selectedBuilding.name}</h2>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-sm font-bold text-white px-2 py-1 rounded-full" style={{ backgroundColor: getTypeColor(selectedBuilding.type) }}>
+                      <span 
+                        className="text-sm font-bold text-white px-2 py-1 rounded-full shadow-sm"
+                        style={{ backgroundColor: getTypeColor(selectedBuilding.type) }}
+                      >
                         {selectedBuilding.code}
                       </span>
                       <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full capitalize">
                         {selectedBuilding.type}
                       </span>
+                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full capitalize">
+                        {selectedBuilding.zone} Zone
+                      </span>
                     </div>
                   </div>
                 </div>
                 <button 
-                  onClick={() => handleNavigateToBuilding(selectedBuilding)}
-                  className="bg-[#601214] text-white px-6 py-3 rounded-xl font-semibold hover:bg-[#4a0d0e] transition-colors"
+                  onClick={handleNavigateToBuilding}
+                  className="bg-gradient-to-br from-[#601214] to-[#8b1a1d] text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg hover:scale-105 transition-all duration-200 flex items-center gap-2"
                 >
+                  <Navigation size={18} />
                   Get Directions
                 </button>
               </div>
@@ -387,7 +473,7 @@ const Info = ({ onNavigate, buildings }) => {
                 <div className="space-y-4">
                   <h3 className="font-bold text-gray-900 text-lg">Building Details</h3>
                   
-                  <div className="flex items-center gap-3 text-gray-600">
+                  <div className="flex items-center gap-3 text-gray-600 p-3 bg-gray-50/50 rounded-xl">
                     <Clock size={18} className="text-[#601214]" />
                     <div>
                       <p className="font-semibold">Operating Hours</p>
@@ -395,7 +481,7 @@ const Info = ({ onNavigate, buildings }) => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 text-gray-600">
+                  <div className="flex items-center gap-3 text-gray-600 p-3 bg-gray-50/50 rounded-xl">
                     <Building2 size={18} className="text-[#601214]" />
                     <div>
                       <p className="font-semibold">Floors</p>
@@ -403,7 +489,7 @@ const Info = ({ onNavigate, buildings }) => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 text-gray-600">
+                  <div className="flex items-center gap-3 text-gray-600 p-3 bg-gray-50/50 rounded-xl">
                     <Wifi size={18} className="text-[#601214]" />
                     <div>
                       <p className="font-semibold">WiFi Coverage</p>
@@ -418,7 +504,7 @@ const Info = ({ onNavigate, buildings }) => {
                     {selectedBuilding.facilities.map((facility, index) => (
                       <span 
                         key={index}
-                        className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium"
+                        className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
                       >
                         {facility}
                       </span>
@@ -427,17 +513,38 @@ const Info = ({ onNavigate, buildings }) => {
                 </div>
               </div>
 
-              <div className="bg-gray-50 rounded-2xl p-6">
-                <h3 className="font-bold text-gray-900 text-lg mb-4">Popular Destinations</h3>
+              <div className="bg-gray-50/50 rounded-2xl p-6 border border-gray-200/50">
+                <h3 className="font-bold text-gray-900 text-lg mb-4">Quick Actions</h3>
                 <div className="space-y-3">
-                  {selectedBuilding.facilities.slice(0, 3).map((facility, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-200">
-                      <span className="font-medium text-gray-900">{facility}</span>
-                      <button className="text-[#601214] font-semibold text-sm hover:underline">
-                        Locate on Map
-                      </button>
+                  <div className="flex items-center justify-between p-3 bg-white/80 rounded-xl border border-gray-200/50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <MapPin size={18} className="text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">Find on Map</p>
+                        <p className="text-gray-500 text-sm">Locate this building</p>
+                      </div>
                     </div>
-                  ))}
+                    <button className="text-[#601214] font-semibold text-sm hover:underline">
+                      Show
+                    </button>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-3 bg-white/80 rounded-xl border border-gray-200/50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                        <Users size={18} className="text-green-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">Contact Information</p>
+                        <p className="text-gray-500 text-sm">Building administration</p>
+                      </div>
+                    </div>
+                    <button className="text-[#601214] font-semibold text-sm hover:underline">
+                      View
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -449,23 +556,32 @@ const Info = ({ onNavigate, buildings }) => {
               filteredBuildings.map((b, index) => (
                 <div 
                   key={index} 
-                  className={`bg-white rounded-2xl p-5 shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-gray-100 hover:border-red-100 transition-all duration-300 animate-enter cursor-pointer`}
-                  style={{ animationDelay: `${index * 100}ms` }}
-                  onClick={() => handleBuildingClick(b)}
+                  className={`bg-white/80 backdrop-blur-md rounded-2xl p-5 shadow-lg border border-gray-200/50 hover:border-[#601214] transition-all duration-300 animate-enter cursor-pointer hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]`}
+                  style={{ animationDelay: `${index * 50}ms` }}
+                  onClick={(e) => handleBuildingItemClick(e, b)}
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <div className="p-2.5 rounded-xl text-white" style={{ backgroundColor: getTypeColor(b.type) }}>
+                      <div 
+                        className="p-2.5 rounded-xl text-white shadow-md" 
+                        style={{ backgroundColor: getTypeColor(b.type) }}
+                      >
                         {getBuildingIcon(b.type)}
                       </div>
                       <div>
-                        <h3 className="font-bold text-gray-900">{b.name}</h3>
+                        <h3 className="font-bold text-gray-900 text-lg">{b.name}</h3>
                         <div className="flex gap-2 mt-1">
-                          <span className="text-xs font-bold text-white px-2 py-0.5 rounded-md" style={{ backgroundColor: getTypeColor(b.type) }}>
+                          <span 
+                            className="text-xs font-bold text-white px-2 py-0.5 rounded-md shadow-sm"
+                            style={{ backgroundColor: getTypeColor(b.type) }}
+                          >
                             {b.code}
                           </span>
                           <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md capitalize">
                             {b.type}
+                          </span>
+                          <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">
+                            {b.zone}
                           </span>
                         </div>
                       </div>
@@ -498,11 +614,39 @@ const Info = ({ onNavigate, buildings }) => {
                 <p className="text-gray-500">
                   No buildings match "{searchTerm}". Try searching with different terms.
                 </p>
+                <button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setFilteredBuildings(enhancedBuildings);
+                  }}
+                  className="mt-4 text-[#601214] font-semibold text-sm hover:underline"
+                >
+                  Clear Search
+                </button>
               </div>
             )}
           </div>
         )}
       </div>
+
+      {/* Footer */}
+      {!selectedBuilding && (
+        <div className="p-6 border-t border-gray-200/50 bg-white/80 backdrop-blur-md">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">
+                Showing {filteredBuildings.length} of {enhancedBuildings.length} buildings
+              </p>
+            </div>
+            <button
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="text-[#601214] font-semibold text-sm hover:underline"
+            >
+              Back to Top
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
