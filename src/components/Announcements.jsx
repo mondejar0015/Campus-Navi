@@ -6,6 +6,7 @@ const Announcements = ({ onNavigate, user }) => {
   const [announcements, setAnnouncements] = useState([]);
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetchAnnouncements();
@@ -13,16 +14,27 @@ const Announcements = ({ onNavigate, user }) => {
 
   const fetchAnnouncements = async () => {
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from('announcements')
         .select('*')
         .eq('is_active', true)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching announcements:', error);
+        setError('Failed to load announcements: ' + error.message);
+        setAnnouncements([]);
+        return;
+      }
+      
+      console.log('Announcements fetched:', data?.length || 0);
       setAnnouncements(data || []);
+      setError('');
     } catch (error) {
       console.error('Error fetching announcements:', error);
+      setError('An unexpected error occurred');
+      setAnnouncements([]);
     } finally {
       setLoading(false);
     }
@@ -89,6 +101,12 @@ const Announcements = ({ onNavigate, user }) => {
 
       {/* Main Content */}
       <div className="flex-1 p-6">
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
+
         {loading ? (
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => (
@@ -107,7 +125,7 @@ const Announcements = ({ onNavigate, user }) => {
           <div className="space-y-4">
             {filteredAnnouncements.map((announcement, index) => (
               <div 
-                key={announcement.id}
+                key={announcement.id || index}
                 className={`bg-white rounded-2xl p-6 shadow-sm border-2 ${getPriorityColor(announcement.priority)} animate-enter`}
                 style={{ animationDelay: `${index * 100}ms` }}
               >
@@ -117,7 +135,7 @@ const Announcements = ({ onNavigate, user }) => {
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-bold text-gray-900 text-lg">{announcement.title}</h3>
+                      <h3 className="font-bold text-gray-900 text-lg">{announcement.title || 'Untitled Announcement'}</h3>
                       {announcement.priority === 'urgent' && (
                         <span className="bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold">
                           URGENT
@@ -154,6 +172,12 @@ const Announcements = ({ onNavigate, user }) => {
                 : `No ${filter} announcements at this time.`
               }
             </p>
+            <button
+              onClick={fetchAnnouncements}
+              className="mt-4 text-[#601214] font-semibold text-sm hover:underline"
+            >
+              Refresh
+            </button>
           </div>
         )}
       </div>

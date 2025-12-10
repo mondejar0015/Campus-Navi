@@ -10,6 +10,52 @@ const AdminPanel = ({ onNavigate, user }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [databaseError, setDatabaseError] = useState('');
 
+  // RLS SQL for reference
+  const rlsPolicySQL = `-- Enable RLS on all tables
+ALTER TABLE public.announcements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
+
+-- Create policies for announcements
+CREATE POLICY "Admins can do everything with announcements" ON public.announcements
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM public.user_roles ur
+      WHERE ur.id = auth.uid() AND ur.role = 'admin'
+    )
+  );
+
+CREATE POLICY "Everyone can read active announcements" ON public.announcements
+  FOR SELECT USING (is_active = true);
+
+-- Create policies for events
+CREATE POLICY "Admins can do everything with events" ON public.events
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM public.user_roles ur
+      WHERE ur.id = auth.uid() AND ur.role = 'admin'
+    )
+  );
+
+CREATE POLICY "Everyone can read active events" ON public.events
+  FOR SELECT USING (is_active = true);
+
+-- Policies for user_roles table
+CREATE POLICY "Users can read their own role" ON public.user_roles
+  FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "System can insert user roles" ON public.user_roles
+  FOR INSERT WITH CHECK (true);`;
+
+  const isRlsError = (err) => {
+    if (!err) return false;
+    const msg = (err.message || '').toString().toLowerCase();
+    return msg.includes('violates row-level security') || 
+           msg.includes('row-level security') || 
+           msg.includes('permission denied') ||
+           err.code === '42501';
+  };
+
   // Form states
   const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
   const [showEventForm, setShowEventForm] = useState(false);
@@ -50,35 +96,37 @@ const AdminPanel = ({ onNavigate, user }) => {
     try {
       console.log('Checking admin status for user:', user.id);
       
-      // Use supabase client with proper error handling
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
         .eq('id', user.id)
-        .maybeSingle();  // Changed from .single() to .maybeSingle()
+        .maybeSingle();
 
       console.log('Admin check result:', { data, error });
 
       if (error) {
         console.error('Admin check error:', error);
-        setDatabaseError('Database error: ' + error.message);
         
-        // If 406 error, table likely doesn't exist or has RLS issues
-        if (error.code === '406' || error.message.includes('406')) {
-          setDatabaseError('Database configuration issue. The user_roles table may not exist or has permission issues.');
+        if (error.code === '42P01') {
+          setDatabaseError('user_roles table does not exist. Please run the SQL setup.');
+          setIsAdmin(false);
+          setLoading(false);
+          return;
         }
+        
+        setDatabaseError('Database error: ' + error.message);
         setIsAdmin(false);
         setLoading(false);
         return;
       }
 
       if (data && data.role === 'admin') {
-        console.log('User is admin, fetching data...');
+        console.log('✅ User is admin');
         setIsAdmin(true);
         setDatabaseError('');
         fetchAllData();
       } else {
-        console.log('User is not admin or no role found');
+        console.log('❌ User is not admin or no role found');
         setIsAdmin(false);
         setLoading(false);
       }
@@ -93,7 +141,8 @@ const AdminPanel = ({ onNavigate, user }) => {
   const fetchAllData = async () => {
     try {
       setLoading(true);
-      
+      setDatabaseError('');
+
       // Fetch announcements
       console.log('Fetching announcements...');
       const { data: announcementsData, error: announcementsError } = await supabase
@@ -103,7 +152,11 @@ const AdminPanel = ({ onNavigate, user }) => {
 
       if (announcementsError) {
         console.error('Error fetching announcements:', announcementsError);
-        setDatabaseError(prev => prev + '\nAnnouncements error: ' + announcementsError.message);
+        if (isRlsError(announcementsError)) {
+          setDatabaseError('RLS issue with announcements: ' + announcementsError.message);
+        } else {
+          setDatabaseError(prev => (prev ? prev + '\n' : '') + 'Announcements error: ' + announcementsError.message);
+        }
       } else {
         console.log('Announcements fetched:', announcementsData?.length || 0);
       }
@@ -117,36 +170,85 @@ const AdminPanel = ({ onNavigate, user }) => {
 
       if (eventsError) {
         console.error('Error fetching events:', eventsError);
-        setDatabaseError(prev => prev + '\nEvents error: ' + eventsError.message);
+        if (isRlsError(eventsError)) {
+          setDatabaseError('RLS issue with events: ' + eventsError.message);
+        } else {
+          setDatabaseError(prev => (prev ? prev + '\n' : '') + 'Events error: ' + eventsError.message);
+        }
       } else {
         console.log('Events fetched:', eventsData?.length || 0);
       }
 
-      setAnnouncements(announcementsData || []);
-      setEvents(eventsData || []);
-      setLoading(false);
+      setAnnouncements(announcementsData ?? []);
+      setEvents(eventsData ?? []);
     } catch (error) {
       console.error('Error fetching admin data:', error);
       setDatabaseError('Fetch error: ' + error.message);
+      setAnnouncements([]);
+      setEvents([]);
+    } finally {
       setLoading(false);
     }
   };
 
   const handleCreateAnnouncement = async (e) => {
     e.preventDefault();
+
+    // Basic validation
+    if (!announcementForm.title.trim() || !announcementForm.content.trim()) {
+      alert('Title and content are required.');
+      return;
+    }
+
+    setLoading(true);
     try {
+      // Normalize expires_at
+      let expiresAt = null;
+      if (announcementForm.expires_at && announcementForm.expires_at.trim() !== '') {
+        const d = new Date(announcementForm.expires_at);
+        if (isNaN(d.getTime())) {
+          alert('Invalid expiry date/time.');
+          setLoading(false);
+          return;
+        }
+        expiresAt = d.toISOString();
+      }
+
+      console.log('Creating announcement with data:', {
+        title: announcementForm.title.trim(),
+        created_by: user?.id
+      });
+
       const { data, error } = await supabase
         .from('announcements')
         .insert([{
-          ...announcementForm,
-          created_by: user.id,
-          expires_at: announcementForm.expires_at || null,
+          title: announcementForm.title.trim(),
+          content: announcementForm.content.trim(),
+          type: announcementForm.type,
+          priority: announcementForm.priority,
+          created_by: user?.id || null,
+          expires_at: expiresAt,
           is_active: true
         }])
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Detailed error:', error);
+        if (error.code === '42501') {
+          setDatabaseError('Permission denied. Please make sure RLS policies are set up correctly.');
+          alert('Permission denied. Admin rights required.');
+        } else {
+          setDatabaseError('Error creating announcement: ' + error.message);
+          alert('Error: ' + error.message);
+        }
+        setLoading(false);
+        return;
+      }
 
+      console.log('Announcement created successfully:', data);
+      setDatabaseError('');
+      
+      // Reset form and refresh data
       setShowAnnouncementForm(false);
       setAnnouncementForm({
         title: '',
@@ -155,26 +257,83 @@ const AdminPanel = ({ onNavigate, user }) => {
         priority: 'normal',
         expires_at: ''
       });
-      fetchAllData();
+      
+      await fetchAllData();
+      
+      alert('Announcement created successfully!');
     } catch (error) {
-      console.error('Error creating announcement:', error);
-      alert('Error creating announcement: ' + error.message);
+      console.error('Unexpected error creating announcement:', error);
+      setDatabaseError('Unexpected error: ' + error.message);
+      alert('Unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleCreateEvent = async (e) => {
     e.preventDefault();
+
+    // Basic validation
+    if (!eventForm.title.trim()) {
+      alert('Event title is required.');
+      return;
+    }
+    if (!eventForm.start_time || !eventForm.end_time) {
+      alert('Start and end times are required.');
+      return;
+    }
+
+    // Parse datetimes
+    const start = new Date(eventForm.start_time);
+    const end = new Date(eventForm.end_time);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      alert('Invalid start or end time.');
+      return;
+    }
+    if (start >= end) {
+      alert('Start time must be before end time.');
+      return;
+    }
+
+    setLoading(true);
     try {
+      console.log('Creating event with data:', {
+        title: eventForm.title.trim(),
+        start_time: start.toISOString(),
+        end_time: end.toISOString()
+      });
+
       const { data, error } = await supabase
         .from('events')
         .insert([{
-          ...eventForm,
+          title: eventForm.title.trim(),
+          description: eventForm.description?.trim() || null,
+          location: eventForm.location?.trim() || null,
+          building_id: eventForm.building_id?.trim() || null,
+          start_time: start.toISOString(),
+          end_time: end.toISOString(),
+          event_type: eventForm.event_type,
           is_active: true
         }])
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Detailed error:', error);
+        if (error.code === '42501') {
+          setDatabaseError('Permission denied. Please make sure RLS policies are set up correctly.');
+          alert('Permission denied. Admin rights required.');
+        } else {
+          setDatabaseError('Error creating event: ' + error.message);
+          alert('Error: ' + error.message);
+        }
+        setLoading(false);
+        return;
+      }
 
+      console.log('Event created successfully:', data);
+      setDatabaseError('');
+
+      // Reset form and refresh data
       setShowEventForm(false);
       setEventForm({
         title: '',
@@ -185,10 +344,16 @@ const AdminPanel = ({ onNavigate, user }) => {
         end_time: '',
         event_type: 'academic'
       });
-      fetchAllData();
+      
+      await fetchAllData();
+      
+      alert('Event created successfully!');
     } catch (error) {
-      console.error('Error creating event:', error);
-      alert('Error creating event: ' + error.message);
+      console.error('Unexpected error creating event:', error);
+      setDatabaseError('Unexpected error: ' + error.message);
+      alert('Unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -201,11 +366,24 @@ const AdminPanel = ({ onNavigate, user }) => {
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error deleting announcement:', error);
+        if (isRlsError(error)) {
+          setDatabaseError('RLS violation when deleting announcement. Policies must allow admins to delete.');
+          alert('Permission denied. Admin rights required.');
+        } else {
+          setDatabaseError('Error deleting announcement: ' + error.message);
+          alert('Error: ' + error.message);
+        }
+        return;
+      }
+      
+      alert('Announcement deleted successfully!');
       fetchAllData();
     } catch (error) {
       console.error('Error deleting announcement:', error);
-      alert('Error deleting announcement: ' + error.message);
+      setDatabaseError('Error deleting announcement: ' + error.message);
+      alert('Error deleting announcement: ' + (error.message || 'Unknown error'));
     }
   };
 
@@ -218,11 +396,24 @@ const AdminPanel = ({ onNavigate, user }) => {
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error deleting event:', error);
+        if (isRlsError(error)) {
+          setDatabaseError('RLS violation when deleting event. Policies must allow admins to delete.');
+          alert('Permission denied. Admin rights required.');
+        } else {
+          setDatabaseError('Error deleting event: ' + error.message);
+          alert('Error: ' + error.message);
+        }
+        return;
+      }
+      
+      alert('Event deleted successfully!');
       fetchAllData();
     } catch (error) {
       console.error('Error deleting event:', error);
-      alert('Error deleting event: ' + error.message);
+      setDatabaseError('Error deleting event: ' + error.message);
+      alert('Error deleting event: ' + (error.message || 'Unknown error'));
     }
   };
 
@@ -233,11 +424,24 @@ const AdminPanel = ({ onNavigate, user }) => {
         .update({ is_active: !currentStatus })
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating announcement:', error);
+        if (isRlsError(error)) {
+          setDatabaseError('RLS violation when updating announcement. Policies must allow admins to update.');
+          alert('Permission denied. Admin rights required.');
+        } else {
+          setDatabaseError('Error updating announcement: ' + error.message);
+          alert('Error: ' + error.message);
+        }
+        return;
+      }
+      
+      alert('Announcement status updated!');
       fetchAllData();
     } catch (error) {
       console.error('Error updating announcement:', error);
-      alert('Error updating announcement: ' + error.message);
+      setDatabaseError('Error updating announcement: ' + error.message);
+      alert('Error updating announcement: ' + (error.message || 'Unknown error'));
     }
   };
 
@@ -248,11 +452,24 @@ const AdminPanel = ({ onNavigate, user }) => {
         .update({ is_active: !currentStatus })
         .eq('id', id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating event:', error);
+        if (isRlsError(error)) {
+          setDatabaseError('RLS violation when updating event. Policies must allow admins to update.');
+          alert('Permission denied. Admin rights required.');
+        } else {
+          setDatabaseError('Error updating event: ' + error.message);
+          alert('Error: ' + error.message);
+        }
+        return;
+      }
+      
+      alert('Event status updated!');
       fetchAllData();
     } catch (error) {
       console.error('Error updating event:', error);
-      alert('Error updating event: ' + error.message);
+      setDatabaseError('Error updating event: ' + error.message);
+      alert('Error updating event: ' + (error.message || 'Unknown error'));
     }
   };
 
@@ -462,13 +679,15 @@ const AdminPanel = ({ onNavigate, user }) => {
                     <button
                       type="submit"
                       className="bg-gradient-to-br from-[#601214] to-[#8b1a1d] text-white px-6 py-2 rounded-lg font-semibold hover:shadow-lg transition-all duration-200"
+                      disabled={loading}
                     >
-                      Create Announcement
+                      {loading ? 'Creating...' : 'Create Announcement'}
                     </button>
                     <button
                       type="button"
                       onClick={() => setShowAnnouncementForm(false)}
                       className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-all duration-200"
+                      disabled={loading}
                     >
                       Cancel
                     </button>
@@ -524,6 +743,7 @@ const AdminPanel = ({ onNavigate, user }) => {
                               announcement.is_active ? 'bg-yellow-100 text-yellow-600' : 'bg-green-100 text-green-600'
                             } hover:opacity-80 transition-opacity`}
                             title={announcement.is_active ? 'Deactivate' : 'Activate'}
+                            disabled={loading}
                           >
                             {announcement.is_active ? 'Pause' : 'Play'}
                           </button>
@@ -531,6 +751,7 @@ const AdminPanel = ({ onNavigate, user }) => {
                             onClick={() => handleDeleteAnnouncement(announcement.id)}
                             className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
                             title="Delete"
+                            disabled={loading}
                           >
                             <Trash2 size={16} />
                           </button>
@@ -641,13 +862,15 @@ const AdminPanel = ({ onNavigate, user }) => {
                     <button
                       type="submit"
                       className="bg-gradient-to-br from-[#601214] to-[#8b1a1d] text-white px-6 py-2 rounded-lg font-semibold hover:shadow-lg transition-all duration-200"
+                      disabled={loading}
                     >
-                      Create Event
+                      {loading ? 'Creating...' : 'Create Event'}
                     </button>
                     <button
                       type="button"
                       onClick={() => setShowEventForm(false)}
                       className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-all duration-200"
+                      disabled={loading}
                     >
                       Cancel
                     </button>
@@ -704,6 +927,7 @@ const AdminPanel = ({ onNavigate, user }) => {
                               event.is_active ? 'bg-yellow-100 text-yellow-600' : 'bg-green-100 text-green-600'
                             } hover:opacity-80 transition-opacity`}
                             title={event.is_active ? 'Deactivate' : 'Activate'}
+                            disabled={loading}
                           >
                             {event.is_active ? 'Pause' : 'Play'}
                           </button>
@@ -711,6 +935,7 @@ const AdminPanel = ({ onNavigate, user }) => {
                             onClick={() => handleDeleteEvent(event.id)}
                             className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
                             title="Delete"
+                            disabled={loading}
                           >
                             <Trash2 size={16} />
                           </button>
@@ -793,6 +1018,24 @@ const AdminPanel = ({ onNavigate, user }) => {
           </div>
         )}
       </div>
+
+      {/* RLS Helper Banner */}
+      {databaseError && databaseError.toLowerCase().includes('rls') && (
+        <div className="fixed bottom-4 right-4 bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-xl border border-red-200/50 z-50 max-w-xs w-full">
+          <p className="text-sm text-gray-800 mb-2 font-semibold">
+            ⚠️ Database Permission Issue
+          </p>
+          <p className="text-xs text-gray-600 mb-3">
+            RLS policies may not be set up. Run this SQL in Supabase:
+          </p>
+          <button
+            onClick={() => navigator.clipboard.writeText(rlsPolicySQL)}
+            className="w-full bg-gradient-to-br from-[#601214] to-[#8b1a1d] text-white px-4 py-2 rounded-lg font-semibold hover:shadow-lg transition-all duration-200"
+          >
+            Copy SQL to Clipboard
+          </button>
+        </div>
+      )}
     </div>
   );
 };

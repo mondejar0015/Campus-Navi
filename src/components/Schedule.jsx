@@ -8,6 +8,7 @@ const Schedule = ({ onNavigate, user }) => {
   const [filter, setFilter] = useState('all');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetchEvents();
@@ -15,6 +16,7 @@ const Schedule = ({ onNavigate, user }) => {
 
   const fetchEvents = async () => {
     try {
+      setLoading(true);
       let query = supabase
         .from('events')
         .select('*')
@@ -26,10 +28,21 @@ const Schedule = ({ onNavigate, user }) => {
       }
 
       const { data, error } = await query;
-      if (error) throw error;
+      
+      if (error) {
+        console.error('Error fetching events:', error);
+        setError('Failed to load events: ' + error.message);
+        setEvents([]);
+        return;
+      }
+      
+      console.log('Events fetched:', data?.length || 0);
       setEvents(data || []);
+      setError('');
     } catch (error) {
       console.error('Error fetching events:', error);
+      setError('An unexpected error occurred');
+      setEvents([]);
     } finally {
       setLoading(false);
     }
@@ -46,18 +59,26 @@ const Schedule = ({ onNavigate, user }) => {
   };
 
   const formatTime = (dateString) => {
-    return new Date(dateString).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
+    try {
+      return new Date(dateString).toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+    } catch {
+      return 'Invalid time';
+    }
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString([], {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric'
-    });
+    try {
+      return new Date(dateString).toLocaleDateString([], {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch {
+      return 'Invalid date';
+    }
   };
 
   return (
@@ -102,6 +123,12 @@ const Schedule = ({ onNavigate, user }) => {
 
       {/* Main Content */}
       <div className="flex-1 p-6">
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
+
         {loading ? (
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => (
@@ -121,7 +148,7 @@ const Schedule = ({ onNavigate, user }) => {
           <div className="space-y-4">
             {events.map((event, index) => (
               <div 
-                key={event.id}
+                key={event.id || index}
                 className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-all animate-enter"
                 style={{ animationDelay: `${index * 100}ms` }}
               >
@@ -139,9 +166,9 @@ const Schedule = ({ onNavigate, user }) => {
                   {/* Event Details */}
                   <div className="flex-1">
                     <div className="flex items-start justify-between mb-2">
-                      <h3 className="font-bold text-gray-900 text-lg">{event.title}</h3>
+                      <h3 className="font-bold text-gray-900 text-lg">{event.title || 'Untitled Event'}</h3>
                       <span className={`px-2 py-1 rounded-full text-xs font-bold ${getEventTypeColor(event.event_type)}`}>
-                        {event.event_type}
+                        {event.event_type || 'general'}
                       </span>
                     </div>
                     
@@ -188,6 +215,12 @@ const Schedule = ({ onNavigate, user }) => {
                 : `No ${filter} events scheduled.`
               }
             </p>
+            <button
+              onClick={fetchEvents}
+              className="mt-4 text-[#601214] font-semibold text-sm hover:underline"
+            >
+              Refresh
+            </button>
           </div>
         )}
       </div>
