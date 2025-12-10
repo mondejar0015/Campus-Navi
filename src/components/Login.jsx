@@ -8,43 +8,53 @@ const Login = ({ onNavigate, onLoginSuccess }) => {
     password: ''
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
     });
+    setError('');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!formData.email || !formData.password) {
-      alert('Please fill in all fields');
+      setError('Please fill in all fields');
       return;
     }
 
     setLoading(true);
+    setError('');
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: formData.email,
         password: formData.password
       });
 
       if (error) {
-        alert('Login failed: ' + error.message);
+        console.error('Login error:', error);
+        setError('Login failed: ' + error.message);
         setLoading(false);
-      } else {
-        // SUCCESS: Explicitly tell App.jsx to update IMMEDIATELY
-        console.log('Login successful, forcing update...');
+        return;
+      }
+
+      if (data?.user) {
+        console.log('✅ Login successful for:', data.user.email);
+        
+        // Wait for auth client to settle then trigger parent to check session/role.
+        // Immediately stop loading and trigger onLoginSuccess (App will fetch role).
+        setLoading(false);
         if (onLoginSuccess) {
-          await onLoginSuccess();
+          onLoginSuccess();
         }
       }
     } catch (error) {
-      console.error('Login error:', error);
-      alert('An unexpected error occurred.');
+      console.error('Unexpected login error:', error);
+      setError('An unexpected error occurred.');
       setLoading(false);
     }
   };
@@ -66,6 +76,12 @@ const Login = ({ onNavigate, onLoginSuccess }) => {
         </div>
         
         <form onSubmit={handleSubmit} className="bg-white p-8 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100">
+          {error && (
+            <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
+
           <div className="space-y-5">
             <div className="group">
               <label className="block text-gray-700 text-sm font-semibold mb-2 ml-1">Email</label>
@@ -101,7 +117,7 @@ const Login = ({ onNavigate, onLoginSuccess }) => {
 
             <button 
               type="submit"
-              className="w-full bg-[#601214] text-white font-bold py-4 rounded-xl shadow-lg shadow-red-900/20 hover:bg-[#4a0d0e] hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center group"
+              className="w-full bg-[#601214] text-white font-bold py-4 rounded-xl shadow-lg shadow-red-900/20 hover:bg-[#4a0d0e] hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-center group disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={loading}
             >
               <span>{loading ? 'Logging In...' : 'Log In'}</span>
@@ -119,8 +135,6 @@ const Login = ({ onNavigate, onLoginSuccess }) => {
             Create Account
           </button>
         </div>
-        
-        {/* Removed Admin Portal Section */}
       </div>
     </div>
   );

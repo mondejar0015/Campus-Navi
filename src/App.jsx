@@ -84,32 +84,48 @@ export default function App() {
       // Get user role from database with PROPER error handling
       let userRole = 'student';
       try {
-        // Use supabase client directly, not fetch API
-        const { data: roleData, error: roleError } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('id', session.user.id)
-          .maybeSingle(); // Use maybeSingle instead of single to handle no rows
+        // Get the latest auth user object
+        const { data: { user: authUser }, error: userErr } = await supabase.auth.getUser();
+        if (userErr) console.warn('getUser warning:', userErr);
+        const authObj = authUser || session.user;
 
-        console.log('Role query result:', { roleData, roleError });
+        // First, check any metadata flags on the auth user (faster and often set for admin accounts)
+        const metaRole =
+          authObj?.user_metadata?.role?.toString().toLowerCase() ||
+          authObj?.app_metadata?.role?.toString().toLowerCase();
 
-        if (roleError) {
-          console.warn('Role query error:', roleError);
-          
-          // Check if it's a 406 error (table doesn't exist or RLS issue)
-          if (roleError.code === '406' || roleError.message.includes('406')) {
-            console.log('Table or permission issue detected, creating user_roles table if needed');
-            
-            // Try to create table via function call or use service role
-            await createUserRoleEntry(session.user.id);
-            userRole = 'student';
-          }
-        } else if (roleData) {
-          userRole = roleData.role || 'student';
+        if (metaRole === 'admin') {
+          console.log('Admin role found in user metadata/app metadata');
+          userRole = 'admin';
         } else {
-          console.log('No role found, creating default student role');
-          await createUserRoleEntry(session.user.id);
-          userRole = 'student';
+          // Then try to read the user_roles table
+          const { data: roleData, error: roleError } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('id', authObj.id)
+            .maybeSingle();
+
+          console.log('Role query result:', { roleData, roleError });
+
+          if (roleError) {
+            console.warn('Role query error:', roleError);
+            // Don't attempt to overwrite any DB rows here; fall back to metadata or default
+            userRole = metaRole === 'admin' ? 'admin' : 'student';
+          } else if (roleData && roleData.role) {
+            userRole = roleData.role;
+          } else {
+            // No DB row found — prefer metadata if present, otherwise default to student.
+            if (metaRole === 'admin') {
+              userRole = 'admin';
+            } else {
+              console.log('No role found in DB or metadata; attempting safe insert of student role (non-destructive)');
+              const created = await createUserRoleEntry(authObj.id);
+              if (!created) {
+                console.warn('Could not create role row (table may be missing or no permissions). Defaulting to student.');
+              }
+              userRole = 'student';
+            }
+          }
         }
       } catch (roleErr) {
         console.warn('Role check exception:', roleErr);
@@ -150,27 +166,29 @@ export default function App() {
   // Helper function to create user role entry
   const createUserRoleEntry = async (userId) => {
     try {
-      // First check if user_roles table exists by trying to insert
-      const { error } = await supabase
+      // Try a plain INSERT — do not upsert. If the row already exists, treat it as success.
+      const { data, error } = await supabase
         .from('user_roles')
-        .upsert({
-          id: userId,
-          role: 'student',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'id'
-        });
+        .insert([{ id: userId, role: 'student', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }]);
 
       if (error) {
         console.warn('Could not create user role entry:', error);
-        
-        // If table doesn't exist, we need to create it
-        if (error.code === '42P01' || error.message.includes('does not exist')) {
-          console.log('user_roles table does not exist. Please run the SQL script to create it.');
+
+        // Table doesn't exist / permission error => return false (don't assume write happened)
+        if (error.code === '42P01' || (error.message && error.message.toLowerCase().includes('does not exist'))) {
           return false;
         }
+
+        // Duplicate key (row already exists) => treat as success (another process already created it)
+        if (error.code === '23505' || (error.message && error.message.toLowerCase().includes('duplicate key'))) {
+          return true;
+        }
+
+        // Other errors: log and return false
+        return false;
       }
+
+      // Insert succeeded
       return true;
     } catch (err) {
       console.warn('createUserRoleEntry error:', err);
