@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, MapPin, Navigation2, Clock, Footprints, Compass, User, Building2, Play, Pause, RotateCcw, Move, CornerUpRight, Search, Plus, Minus } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 
-const Navigate = ({ onNavigate, buildings }) => {
+const Navigate = ({ onNavigate }) => {
   const [route, setRoute] = useState({
     start: '',
     destination: ''
@@ -20,6 +21,8 @@ const Navigate = ({ onNavigate, buildings }) => {
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [buildings, setBuildings] = useState([]);
+  const [loading, setLoading] = useState(true);
   
   // New state for tracking animation
   const [startTime, setStartTime] = useState(null);
@@ -36,130 +39,162 @@ const Navigate = ({ onNavigate, buildings }) => {
   const MAX_SCALE = 3;
   const ZOOM_STEP = 0.2;
 
-  // Campus layout matching CampusMap.jsx
+  // --- SAME CAMPUS LAYOUT AS CampusMap.jsx ---
   const campusZones = {
-    academic: { x: 80, y: 50, width: 280, height: 120, label: 'ACADEMIC ZONE', color: '#1e40af' },
-    student: { x: 30, y: 180, width: 150, height: 100, label: 'STUDENT LIFE', color: '#dc2626' },
-    sports: { x: 200, y: 290, width: 200, height: 120, label: 'SPORTS ZONE', color: '#059669' },
-    admin: { x: 300, y: 150, width: 120, height: 80, label: 'ADMIN ZONE', color: '#7e22ce' },
-    residential: { x: 400, y: 50, width: 80, height: 200, label: 'RESIDENTIAL', color: '#ea580c' },
-    arts: { x: 400, y: 270, width: 80, height: 140, label: 'ARTS ZONE', color: '#db2777' }
+    academic: { x: 150, y: 80, width: 400, height: 200, label: 'ACADEMIC CORE', color: '#1e40af' },
+    administration: { x: 50, y: 80, width: 80, height: 120, label: 'ADMIN', color: '#7e22ce' },
+    library: { x: 150, y: 300, width: 150, height: 120, label: 'LIBRARY QUAD', color: '#2563eb' },
+    student_life: { x: 320, y: 300, width: 230, height: 120, label: 'STUDENT LIFE', color: '#dc2626' },
+    sports: { x: 50, y: 350, width: 230, height: 180, label: 'SPORTS COMPLEX', color: '#059669' },
+    residential: { x: 570, y: 80, width: 180, height: 300, label: 'RESIDENTIAL', color: '#ea580c' },
+    arts: { x: 570, y: 400, width: 180, height: 130, label: 'ARTS QUAD', color: '#db2777' },
+    parking: { x: 320, y: 430, width: 220, height: 100, label: 'PARKING', color: '#6b7280' }
   };
 
-  // Available starting points (key locations on campus)
-  const startPoints = [
-    { id: 'current', name: 'Current Location', x: 250, y: 250, type: 'special' },
-    { id: 'main_gate', name: 'Main Gate', x: 80, y: 400, type: 'entrance' },
-    { id: 'quad_center', name: 'Quad Center', x: 250, y: 250, type: 'landmark' },
-    { id: 'library_entrance', name: 'Library Entrance', x: 175, y: 155, type: 'building' },
-    { id: 'cafeteria_entrance', name: 'Cafeteria Entrance', x: 85, y: 255, type: 'building' },
-    { id: 'student_center', name: 'Student Center', x: 85, y: 185, type: 'building' },
-    { id: 'gym_entrance', name: 'Gym Entrance', x: 255, y: 335, type: 'building' },
-    { id: 'admin_entrance', name: 'Admin Entrance', x: 295, y: 145, type: 'building' }
+  // Same building data as CampusMap.jsx
+  const staticBuildings = [
+    // --- ENTRANCE & ADMINISTRATION AREA ---
+    { id: 'MAIN_GATE', x: 180, y: 20, width: 40, height: 25, label: 'GATE', name: 'Main Entrance', type: 'entrance', color: '#6b7280', zone: 'administration' },
+    { id: 'GUARD_HOUSE', x: 140, y: 45, width: 40, height: 25, label: 'GUARD', name: 'Security Gate', type: 'security', color: '#6b7280', zone: 'administration' },
+    
+    // Administrative Cluster (near entrance)
+    { id: 'ADMIN_BUILDING', x: 60, y: 100, width: 60, height: 45, label: 'ADMIN', name: 'Administration', type: 'admin', color: '#7e22ce', zone: 'administration' },
+    { id: 'REGISTRAR', x: 130, y: 100, width: 50, height: 40, label: 'REG', name: 'Registrar Office', type: 'admin', color: '#7e22ce', zone: 'administration' },
+    { id: 'FINANCE', x: 60, y: 155, width: 50, height: 35, label: 'FIN', name: 'Finance Office', type: 'admin', color: '#7e22ce', zone: 'administration' },
+    
+    // --- ACADEMIC CORE (Central area) ---
+    { id: 'SCIENCE_HALL', x: 180, y: 100, width: 70, height: 50, label: 'SCI', name: 'Science Building', type: 'science', color: '#7c3aed', zone: 'academic' },
+    { id: 'ENGINEERING', x: 265, y: 100, width: 70, height: 50, label: 'ENG', name: 'Engineering Hall', type: 'academic', color: '#1e40af', zone: 'academic' },
+    { id: 'BUSINESS', x: 350, y: 100, width: 70, height: 50, label: 'BUS', name: 'Business School', type: 'academic', color: '#1e40af', zone: 'academic' },
+    { id: 'ARTS_SCIENCES', x: 435, y: 100, width: 70, height: 50, label: 'A&S', name: 'Arts & Sciences', type: 'academic', color: '#1e40af', zone: 'academic' },
+    
+    // Secondary Academic Buildings
+    { id: 'COMPUTER_SCIENCE', x: 180, y: 165, width: 65, height: 45, label: 'CS', name: 'Computer Science', type: 'academic', color: '#1e40af', zone: 'academic' },
+    { id: 'MATHEMATICS', x: 260, y: 165, width: 65, height: 45, label: 'MATH', name: 'Mathematics', type: 'academic', color: '#1e40af', zone: 'academic' },
+    { id: 'PHYSICS', x: 340, y: 165, width: 65, height: 45, label: 'PHY', name: 'Physics Lab', type: 'science', color: '#7c3aed', zone: 'academic' },
+    { id: 'CHEMISTRY', x: 420, y: 165, width: 65, height: 45, label: 'CHEM', name: 'Chemistry Lab', type: 'science', color: '#7c3aed', zone: 'academic' },
+    
+    // Lecture Halls
+    { id: 'LECTURE_HALL_A', x: 500, y: 100, width: 55, height: 40, label: 'LHA', name: 'Lecture Hall A', type: 'academic', color: '#1e40af', zone: 'academic' },
+    { id: 'LECTURE_HALL_B', x: 500, y: 165, width: 55, height: 40, label: 'LHB', name: 'Lecture Hall B', type: 'academic', color: '#1e40af', zone: 'academic' },
+    
+    // --- LIBRARY QUAD ---
+    { id: 'MAIN_LIBRARY', x: 180, y: 320, width: 100, height: 60, label: 'LIB', name: 'Main Library', type: 'library', color: '#2563eb', zone: 'library' },
+    { id: 'STUDY_CENTER', x: 290, y: 320, width: 60, height: 50, label: 'STUDY', name: 'Study Center', type: 'library', color: '#2563eb', zone: 'library' },
+    { id: 'RESEARCH_CENTER', x: 180, y: 390, width: 70, height: 50, label: 'RES', name: 'Research Center', type: 'science', color: '#7c3aed', zone: 'library' },
+    
+    // --- STUDENT LIFE CENTER ---
+    { id: 'STUDENT_CENTER', x: 340, y: 320, width: 85, height: 55, label: 'SC', name: 'Student Center', type: 'student', color: '#dc2626', zone: 'student_life' },
+    { id: 'CAFETERIA', x: 435, y: 320, width: 75, height: 50, label: 'CAFE', name: 'Main Cafeteria', type: 'cafeteria', color: '#ea580c', zone: 'student_life' },
+    { id: 'BOOKSTORE', x: 520, y: 320, width: 60, height: 40, label: 'BOOK', name: 'Bookstore', type: 'store', color: '#dc2626', zone: 'student_life' },
+    { id: 'HEALTH_CENTER', x: 340, y: 385, width: 70, height: 45, label: 'HEALTH', name: 'Health Center', type: 'medical', color: '#dc2626', zone: 'student_life' },
+    { id: 'IT_SERVICES', x: 435, y: 385, width: 65, height: 45, label: 'IT', name: 'IT Services', type: 'admin', color: '#7e22ce', zone: 'student_life' },
+    
+    // --- SPORTS COMPLEX ---
+    { id: 'GYMNASIUM', x: 80, y: 370, width: 80, height: 60, label: 'GYM', name: 'Main Gymnasium', type: 'gym', color: '#dc2626', zone: 'sports' },
+    { id: 'SWIMMING_POOL', x: 170, y: 470, width: 60, height: 50, label: 'POOL', name: 'Swimming Pool', type: 'sports', color: '#0891b2', zone: 'sports' },
+    { id: 'TENNIS_COURTS', x: 80, y: 470, width: 70, height: 40, label: 'TENNIS', name: 'Tennis Courts', type: 'sports', color: '#16a34a', zone: 'sports' },
+    { id: 'SPORTS_FIELD', x: 80, y: 520, width: 160, height: 35, label: 'FIELD', name: 'Sports Field', type: 'sports', color: '#16a34a', zone: 'sports' },
+    { id: 'TRACK', x: 250, y: 470, width: 80, height: 30, label: 'TRACK', name: 'Running Track', type: 'sports', color: '#16a34a', zone: 'sports' },
+    
+    // --- RESIDENTIAL AREA ---
+    { id: 'DORM_NORTH', x: 580, y: 100, width: 70, height: 50, label: 'DORM N', name: 'North Dormitory', type: 'dorm', color: '#ea580c', zone: 'residential' },
+    { id: 'DORM_SOUTH', x: 580, y: 165, width: 70, height: 50, label: 'DORM S', name: 'South Dormitory', type: 'dorm', color: '#ea580c', zone: 'residential' },
+    { id: 'DORM_EAST', x: 580, y: 230, width: 70, height: 50, label: 'DORM E', name: 'East Dormitory', type: 'dorm', color: '#ea580c', zone: 'residential' },
+    { id: 'DINING_HALL', x: 660, y: 165, width: 80, height: 50, label: 'DINE', name: 'Dining Hall', type: 'cafeteria', color: '#ea580c', zone: 'residential' },
+    { id: 'STUDENT_LOUNGE', x: 660, y: 230, width: 70, height: 45, label: 'LOUNGE', name: 'Student Lounge', type: 'student', color: '#ea580c', zone: 'residential' },
+    
+    // --- ARTS QUAD ---
+    { id: 'ART_STUDIO', x: 580, y: 420, width: 70, height: 50, label: 'ART', name: 'Art Studio', type: 'arts', color: '#db2777', zone: 'arts' },
+    { id: 'MUSIC_HALL', x: 660, y: 420, width: 70, height: 50, label: 'MUSIC', name: 'Music Hall', type: 'arts', color: '#db2777', zone: 'arts' },
+    { id: 'THEATER', x: 580, y: 480, width: 85, height: 50, label: 'THEA', name: 'Auditorium', type: 'arts', color: '#db2777', zone: 'arts' },
+    { id: 'MEDIA_CENTER', x: 660, y: 480, width: 70, height: 50, label: 'MEDIA', name: 'Media Center', type: 'arts', color: '#db2777', zone: 'arts' },
+    
+    // --- PARKING & SERVICES ---
+    { id: 'MAIN_PARKING', x: 330, y: 450, width: 100, height: 50, label: 'PARK', name: 'Main Parking Lot', type: 'parking', color: '#6b7280', zone: 'parking' },
+    { id: 'FACILITIES', x: 440, y: 450, width: 80, height: 50, label: 'FAC', name: 'Facilities Building', type: 'admin', color: '#6b7280', zone: 'parking' },
+    { id: 'CHAPEL', x: 500, y: 480, width: 60, height: 50, label: 'CHAPEL', name: 'Campus Chapel', type: 'religious', color: '#d97706', zone: 'arts' },
+    
+    // --- ADDITIONAL BUILDINGS ---
+    { id: 'ALUMNI_CENTER', x: 660, y: 100, width: 70, height: 45, label: 'ALUMNI', name: 'Alumni Center', type: 'admin', color: '#7e22ce', zone: 'residential' },
+    { id: 'CAREER_CENTER', x: 520, y: 385, width: 60, height: 40, label: 'CAREER', name: 'Career Services', type: 'admin', color: '#7e22ce', zone: 'student_life' }
   ];
 
-  // Building data matching CampusMap.jsx
-  const mapBuildings = [
-    // Academic Zone
-    { id: 'CCS', x: 100, y: 70, width: 70, height: 50, label: 'CCS', name: 'College of Computer Studies', type: 'academic', color: '#1e40af', zone: 'academic' },
-    { id: 'SCI', x: 190, y: 70, width: 70, height: 50, label: 'SCI', name: 'Science Labs', type: 'science', color: '#7c3aed', zone: 'academic' },
-    { id: 'CBA', x: 100, y: 140, width: 70, height: 50, label: 'CBA', name: 'College of Business Administration', type: 'academic', color: '#1e40af', zone: 'academic' },
-    { id: 'CED', x: 190, y: 140, width: 70, height: 50, label: 'CED', name: 'College of Education', type: 'academic', color: '#1e40af', zone: 'academic' },
-    { id: 'ENG', x: 280, y: 70, width: 70, height: 50, label: 'ENG', name: 'Engineering', type: 'academic', color: '#1e40af', zone: 'academic' },
-    { id: 'MATH', x: 280, y: 140, width: 70, height: 50, label: 'MATH', name: 'Mathematics', type: 'academic', color: '#1e40af', zone: 'academic' },
-    
-    // Student Life Zone
-    { id: 'STUD', x: 50, y: 200, width: 80, height: 60, label: 'STUD', name: 'Student Center', type: 'student', color: '#dc2626', zone: 'student' },
-    { id: 'CAF', x: 50, y: 280, width: 60, height: 60, label: 'CAF', name: 'Cafeteria', type: 'cafeteria', color: '#ea580c', zone: 'student' },
-    { id: 'LIB', x: 140, y: 200, width: 90, height: 70, label: 'LIB', name: 'Main Library', type: 'library', color: '#2563eb', zone: 'student' },
-    { id: 'BOOK', x: 140, y: 280, width: 50, height: 50, label: 'BOOK', name: 'Bookstore', type: 'store', color: '#dc2626', zone: 'student' },
-    
-    // Sports Zone
-    { id: 'GYM', x: 220, y: 310, width: 80, height: 70, label: 'GYM', name: 'Gymnasium', type: 'gym', color: '#dc2626', zone: 'sports' },
-    { id: 'FIELD', x: 220, y: 400, width: 160, height: 50, label: 'FIELD', name: 'Sports Field', type: 'sports', color: '#16a34a', zone: 'sports' },
-    { id: 'POOL', x: 320, y: 310, width: 60, height: 70, label: 'POOL', name: 'Swimming Pool', type: 'sports', color: '#0891b2', zone: 'sports' },
-    { id: 'TENNIS', x: 390, y: 400, width: 70, height: 40, label: 'TENNIS', name: 'Tennis Courts', type: 'sports', color: '#16a34a', zone: 'sports' },
-    
-    // Admin Zone
-    { id: 'ADMIN', x: 320, y: 170, width: 80, height: 60, label: 'ADM', name: 'Administration', type: 'admin', color: '#7e22ce', zone: 'admin' },
-    { id: 'MED', x: 320, y: 250, width: 60, height: 50, label: 'MED', name: 'Medical Clinic', type: 'medical', color: '#dc2626', zone: 'admin' },
-    { id: 'SEC', x: 390, y: 170, width: 50, height: 40, label: 'SEC', name: 'Security', type: 'admin', color: '#7e22ce', zone: 'admin' },
-    
-    // Residential Zone
-    { id: 'DORM1', x: 410, y: 70, width: 60, height: 40, label: 'DORM1', name: 'North Dormitory', type: 'dorm', color: '#ea580c', zone: 'residential' },
-    { id: 'DORM2', x: 410, y: 120, width: 60, height: 40, label: 'DORM2', name: 'South Dormitory', type: 'dorm', color: '#ea580c', zone: 'residential' },
-    { id: 'DORM3', x: 410, y: 170, width: 60, height: 40, label: 'DORM3', name: 'East Dormitory', type: 'dorm', color: '#ea580c', zone: 'residential' },
-    
-    // Arts Zone
-    { id: 'ART', x: 410, y: 290, width: 60, height: 50, label: 'ART', name: 'Art Studio', type: 'arts', color: '#db2777', zone: 'arts' },
-    { id: 'MUSIC', x: 410, y: 350, width: 60, height: 50, label: 'MUSIC', name: 'Music Hall', type: 'arts', color: '#db2777', zone: 'arts' },
-    { id: 'THEA', x: 410, y: 410, width: 60, height: 40, label: 'THEA', name: 'Theater', type: 'arts', color: '#db2777', zone: 'arts' },
-    
-    // Additional Buildings
-    { id: 'PARK', x: 20, y: 420, width: 80, height: 40, label: 'PARK', name: 'Parking Lot', type: 'parking', color: '#6b7280', zone: 'student' },
-    { id: 'CHAP', x: 20, y: 350, width: 50, height: 50, label: 'CHAP', name: 'Chapel', type: 'religious', color: '#d97706', zone: 'student' },
-    { id: 'RES', x: 80, y: 350, width: 50, height: 50, label: 'RES', name: 'Research Center', type: 'science', color: '#7c3aed', zone: 'academic' }
-  ];
-
-  // Simulated route path coordinates
-  const routePaths = {
-    'College of Computer Studies': [{ x: 135, y: 95 }],
-    'Science Labs': [{ x: 225, y: 95 }],
-    'College of Business Administration': [{ x: 135, y: 165 }],
-    'College of Education': [{ x: 225, y: 165 }],
-    'Engineering': [{ x: 315, y: 95 }],
-    'Mathematics': [{ x: 315, y: 165 }],
-    'Student Center': [{ x: 90, y: 230 }],
-    'Cafeteria': [{ x: 80, y: 305 }],
-    'Main Library': [{ x: 185, y: 235 }],
-    'Bookstore': [{ x: 165, y: 305 }],
-    'Gymnasium': [{ x: 260, y: 345 }],
-    'Sports Field': [{ x: 300, y: 425 }],
-    'Swimming Pool': [{ x: 350, y: 345 }],
-    'Tennis Courts': [{ x: 425, y: 420 }],
-    'Administration': [{ x: 360, y: 200 }],
-    'Medical Clinic': [{ x: 350, y: 275 }],
-    'Security': [{ x: 415, y: 190 }],
-    'North Dormitory': [{ x: 440, y: 90 }],
-    'South Dormitory': [{ x: 440, y: 140 }],
-    'East Dormitory': [{ x: 440, y: 190 }],
-    'Art Studio': [{ x: 440, y: 315 }],
-    'Music Hall': [{ x: 440, y: 375 }],
-    'Theater': [{ x: 440, y: 430 }],
-    'Parking Lot': [{ x: 60, y: 440 }],
-    'Chapel': [{ x: 45, y: 375 }],
-    'Research Center': [{ x: 105, y: 375 }]
-  };
-
-  // Check for pre-selected destination from Info page
+  // Fetch buildings from database or use static data
   useEffect(() => {
-    // Check if there's a pre-selected destination from Info page
+    fetchBuildings();
+    
+    // Check for pre-selected destination from Info page
     const savedDestination = localStorage.getItem('selectedDestination');
     if (savedDestination) {
       console.log('Found saved destination:', savedDestination);
       setRoute(prev => ({ ...prev, destination: savedDestination }));
       localStorage.removeItem('selectedDestination'); // Clear after use
-      
-      // Auto-select a start point if none is selected
-      if (!userPosition) {
-        const defaultStart = startPoints[0];
-        setUserPosition(defaultStart);
-        setRoute(prev => ({ ...prev, start: defaultStart.name }));
-      }
     }
   }, []);
 
-  // Initialize
-  useEffect(() => {
-    setAvailableStartPoints(startPoints);
-    
-    // Set default user position if not already set
-    if (!userPosition) {
-      const defaultPosition = startPoints[0];
-      setUserPosition(defaultPosition);
-      setRoute(prev => ({ ...prev, start: defaultPosition.name }));
-    }
+  const fetchBuildings = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('buildings')
+        .select('*')
+        .eq('is_active', true);
 
+      if (error) {
+        console.error('Error fetching buildings:', error);
+        // Use static buildings if database fails
+        setBuildings(staticBuildings);
+      } else if (data && data.length > 0) {
+        // Use database buildings if available
+        const formattedBuildings = data.map(b => ({
+          id: b.id,
+          name: b.building_name,
+          label: b.building_code,
+          type: b.building_type,
+          color: b.color,
+          x: b.coordinates?.x || 0,
+          y: b.coordinates?.y || 0,
+          width: b.coordinates?.width || 60,
+          height: b.coordinates?.height || 40,
+          zone: b.zone || 'academic'
+        }));
+        setBuildings(formattedBuildings);
+      } else {
+        // Use static buildings if no database entries
+        setBuildings(staticBuildings);
+      }
+      
+      // Initialize available start points (same as CampusMap)
+      const startPoints = [
+        { id: 'main_gate', name: 'Main Gate', x: 200, y: 80, type: 'entrance' },
+        { id: 'central_quad', name: 'Central Quad', x: 400, y: 140, type: 'landmark' },
+        { id: 'student_center', name: 'Student Center Entrance', x: 382, y: 347, type: 'building' },
+        { id: 'library_entrance', name: 'Library Entrance', x: 230, y: 350, type: 'building' },
+        { id: 'parking_lot', name: 'Parking Lot Entrance', x: 380, y: 475, type: 'parking' },
+        { id: 'dorm_entrance', name: 'Dormitory Entrance', x: 615, y: 165, type: 'building' },
+        { id: 'gym_entrance', name: 'Gym Entrance', x: 120, y: 400, type: 'building' },
+        { id: 'cafeteria_entrance', name: 'Cafeteria Entrance', x: 472, y: 345, type: 'building' }
+      ];
+      
+      setAvailableStartPoints(startPoints);
+      
+      // Set default user position if not already set
+      if (!userPosition) {
+        const defaultPosition = startPoints[0]; // Main Gate
+        setUserPosition(defaultPosition);
+        setRoute(prev => ({ ...prev, start: defaultPosition.name }));
+      }
+    } catch (error) {
+      console.error('Error fetching buildings:', error);
+      setBuildings(staticBuildings);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Cleanup animation on unmount
+  useEffect(() => {
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
@@ -178,23 +213,85 @@ const Navigate = ({ onNavigate, buildings }) => {
     return totalDistance;
   };
 
+  // Improved path calculation using actual campus pathways
   const calculatePath = (startPoint, destination) => {
-    if (!startPoint || !routePaths[destination]) return [];
+    if (!startPoint || !destination) return [];
     
-    const destinationPoint = routePaths[destination][0];
+    const destinationBuilding = buildings.find(b => b.name === destination);
+    if (!destinationBuilding) return [];
+    
+    const destinationPoint = { 
+      x: destinationBuilding.x + destinationBuilding.width/2, 
+      y: destinationBuilding.y + destinationBuilding.height/2 
+    };
+    
     const path = [startPoint];
     
-    // Add intermediate points for more natural movement
-    const steps = 4;
-    for (let i = 1; i < steps; i++) {
-      const progress = i / steps;
-      const x = startPoint.x + (destinationPoint.x - startPoint.x) * progress;
-      const y = startPoint.y + (destinationPoint.y - startPoint.y) * progress;
-      path.push({ x, y });
+    // Calculate path based on zones (using logical pathway routes)
+    const startZone = getZoneForPoint(startPoint);
+    const destZone = destinationBuilding.zone;
+    
+    // If same zone, direct path
+    if (startZone === destZone) {
+      path.push(destinationPoint);
+      return path;
     }
     
+    // Route through pathway network
+    // Main intersections as waypoints
+    const intersections = {
+      main_gate: { x: 200, y: 80 },
+      central_quad: { x: 400, y: 140 },
+      library_intersection: { x: 230, y: 320 },
+      student_center_intersection: { x: 400, y: 320 },
+      sports_intersection: { x: 200, y: 380 },
+      residential_intersection: { x: 600, y: 230 },
+      arts_intersection: { x: 600, y: 380 }
+    };
+    
+    // Determine route based on zones
+    let waypoints = [];
+    
+    if (startZone === 'administration' || startZone === 'academic') {
+      waypoints.push(intersections.central_quad);
+    } else if (startZone === 'library' || startZone === 'student_life') {
+      waypoints.push(intersections.library_intersection);
+    } else if (startZone === 'sports') {
+      waypoints.push(intersections.sports_intersection);
+    } else if (startZone === 'residential') {
+      waypoints.push(intersections.residential_intersection);
+    } else if (startZone === 'arts') {
+      waypoints.push(intersections.arts_intersection);
+    }
+    
+    // Add destination zone waypoint
+    if (destZone === 'academic' || destZone === 'administration') {
+      waypoints.push(intersections.central_quad);
+    } else if (destZone === 'library' || destZone === 'student_life') {
+      waypoints.push(intersections.library_intersection);
+    } else if (destZone === 'sports') {
+      waypoints.push(intersections.sports_intersection);
+    } else if (destZone === 'residential') {
+      waypoints.push(intersections.residential_intersection);
+    } else if (destZone === 'arts') {
+      waypoints.push(intersections.arts_intersection);
+    }
+    
+    // Add waypoints to path
+    waypoints.forEach(wp => path.push(wp));
     path.push(destinationPoint);
+    
     return path;
+  };
+
+  const getZoneForPoint = (point) => {
+    for (const [zoneName, zone] of Object.entries(campusZones)) {
+      if (point.x >= zone.x && point.x <= zone.x + zone.width &&
+          point.y >= zone.y && point.y <= zone.y + zone.height) {
+        return zoneName;
+      }
+    }
+    return 'academic'; // Default
   };
 
   // Map interaction functions
@@ -314,8 +411,8 @@ const Navigate = ({ onNavigate, buildings }) => {
     const path = calculatePath(startPoint, routeData.destination);
     const totalPathDistance = calculateTotalPathDistance(path);
     
-    const distance = totalPathDistance * 2;
-    const time = Math.ceil(distance / 75);
+    const distance = totalPathDistance * 2; // Scale for realistic distances
+    const time = Math.ceil(distance / 75); // ~75m per minute walking
     
     const newRouteInfo = {
       distance: `${Math.round(distance)}m`,
@@ -324,16 +421,35 @@ const Navigate = ({ onNavigate, buildings }) => {
       steps: Math.round(distance * 1.3)
     };
 
-    const steps = [
-      `Start navigation from ${routeData.start}`,
-      'In 50m, proceed to the main pathway.',
-      'Continue straight for 100m, passing the Cafeteria.',
-      'Turn right at the Quad Center intersection.',
-      `You have arrived at ${routeData.destination}.`
-    ];
-
+    // Generate step-by-step instructions based on path
+    const steps = generateStepInstructions(startPoint, routeData.destination, path);
+    
     setRouteInfo(newRouteInfo);
     setStepByStep(steps);
+  };
+
+  const generateStepInstructions = (start, destination, path) => {
+    const steps = [`Start navigation from ${start.name}`];
+    
+    // Analyze path and generate instructions
+    if (path.length > 2) {
+      // Check if passing through central quad
+      const centralQuad = { x: 400, y: 140 };
+      const isNearCentral = path.some(p => getDistance(p, centralQuad) < 50);
+      
+      if (isNearCentral) {
+        steps.push('Proceed through the Central Quad');
+      }
+      
+      // Check if using main pathways
+      if (path.length > 3) {
+        steps.push('Follow the main campus pathway');
+        steps.push('Continue along the designated walkways');
+      }
+    }
+    
+    steps.push(`You have arrived at ${destination}`);
+    return steps;
   };
 
   const startNavigation = () => {
@@ -390,21 +506,21 @@ const Navigate = ({ onNavigate, buildings }) => {
     if (!isSettingStart) return;
     
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * 500;
-    const y = ((event.clientY - rect.top) / rect.height) * 500;
+    const x = ((event.clientX - rect.left) / rect.width) * 800;
+    const y = ((event.clientY - rect.top) / rect.height) * 600;
     
     const customStart = {
       id: 'custom',
       name: 'Custom Location',
-      x: Math.max(20, Math.min(480, x)),
-      y: Math.max(20, Math.min(480, y)),
+      x: Math.max(20, Math.min(780, x)),
+      y: Math.max(20, Math.min(580, y)),
       type: 'custom'
     };
     
     handleStartPointSelect(customStart);
   };
 
-  // Map Components
+  // Map Components (SAME AS CampusMap.jsx)
   const Zone = ({ zone }) => (
     <g>
       <rect 
@@ -455,7 +571,7 @@ const Navigate = ({ onNavigate, buildings }) => {
       />
       <text 
         x={b.x + b.width/2} 
-        y={b.y + b.height/2 + 4} 
+        y={b.y + b.height/2 + 2} 
         textAnchor="middle" 
         className="font-bold pointer-events-none"
         style={{ fontSize: '11px', fontWeight: 'bold', fill: '#1f2937' }}
@@ -470,7 +586,7 @@ const Navigate = ({ onNavigate, buildings }) => {
       <circle 
         cx={point.x} 
         cy={point.y} 
-        r="6" 
+        r="8" 
         fill={isCurrentPosition ? '#3b82f6' : '#ef4444'}
         stroke="white"
         strokeWidth="2"
@@ -479,7 +595,7 @@ const Navigate = ({ onNavigate, buildings }) => {
         <circle 
           cx={point.x} 
           cy={point.y} 
-          r="10" 
+          r="12" 
           fill="none"
           stroke="#3b82f6"
           strokeWidth="2"
@@ -490,7 +606,7 @@ const Navigate = ({ onNavigate, buildings }) => {
   );
 
   const currentPath = userPosition && route.destination ? calculatePath(userPosition, route.destination) : [];
-  const destinationBuilding = mapBuildings.find(b => b.name === route.destination);
+  const destinationBuilding = buildings.find(b => b.name === route.destination);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex flex-col">
@@ -578,7 +694,7 @@ const Navigate = ({ onNavigate, buildings }) => {
               className="w-full bg-transparent text-gray-900 outline-none font-medium text-lg appearance-none"
             >
               <option value="">Select your destination...</option>
-              {mapBuildings.map((building, index) => (
+              {buildings.map((building, index) => (
                 <option key={index} value={building.name}>
                   {building.name} ({building.label})
                 </option>
@@ -708,12 +824,12 @@ const Navigate = ({ onNavigate, buildings }) => {
           </div>
         )}
 
-        {/* Interactive Map */}
-        {userPosition && (
+        {/* Interactive Map - SAME AS CampusMap.jsx */}
+        {userPosition && !loading && (
           <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 shadow-xl border border-gray-200/50 animate-enter delay-300">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-900">
-                Current Position & Route
+                Campus Navigation Map
               </h2>
               <div className="flex items-center gap-2 bg-gray-100/80 rounded-xl px-3 py-2">
                 <Compass size={16} className="text-[#601214]" />
@@ -741,10 +857,10 @@ const Navigate = ({ onNavigate, buildings }) => {
                 }} 
               >
                 <svg 
-                  viewBox="0 0 500 500"
+                  viewBox="0 0 800 600"
                   className="drop-shadow-sm"
-                  width="500"
-                  height="500"
+                  width="800"
+                  height="600"
                   style={{ filter: 'drop-shadow(0px 4px 12px rgba(0, 0, 0, 0.1))' }}
                 >
                   {/* Background with grid */}
@@ -752,35 +868,127 @@ const Navigate = ({ onNavigate, buildings }) => {
                     <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
                       <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#d1d5db" strokeWidth="0.5" opacity="0.3"/>
                     </pattern>
+                    <linearGradient id="roadGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%" stopColor="#78716c" />
+                      <stop offset="50%" stopColor="#a8a29e" />
+                      <stop offset="100%" stopColor="#78716c" />
+                    </linearGradient>
+                    <linearGradient id="pathwayGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%" stopColor="#e7e5e4" />
+                      <stop offset="50%" stopColor="#f5f5f4" />
+                      <stop offset="100%" stopColor="#e7e5e4" />
+                    </linearGradient>
                   </defs>
-                  <rect x="0" y="0" width="500" height="500" fill="#f0fdf4" />
-                  <rect x="0" y="0" width="500" height="500" fill="url(#grid)" />
+                  <rect x="0" y="0" width="800" height="600" fill="#f0fdf4" />
+                  <rect x="0" y="0" width="800" height="600" fill="url(#grid)" />
                   
                   {/* Campus Zones */}
                   {Object.values(campusZones).map((zone, index) => (
                     <Zone key={index} zone={zone} />
                   ))}
 
-                  {/* Main Pathways */}
-                  <g className="opacity-80">
-                    <path d="M0 250 L500 250" stroke="#a8a29e" strokeWidth="35" strokeLinecap="round" />
-                    <path d="M250 0 L250 500" stroke="#a8a29e" strokeWidth="35" strokeLinecap="round" />
-                    <circle cx="250" cy="250" r="40" fill="#a8a29e" />
+                  {/* MAIN ROAD SYSTEM - Same as CampusMap */}
+                  <g className="opacity-95">
+                    {/* MAIN ENTRANCE ROAD */}
+                    <path d="M200,20 L200,80" fill="none" stroke="url(#roadGradient)" strokeWidth="35" strokeLinecap="round" />
                     
-                    <path d="M100 100 L400 100" stroke="#d6d3d1" strokeWidth="20" strokeLinecap="round" strokeDasharray="2 8" />
-                    <path d="M100 400 L400 400" stroke="#d6d3d1" strokeWidth="20" strokeLinecap="round" strokeDasharray="2 8" />
+                    {/* MAIN CAMPUS RING ROAD */}
+                    <path d="M50,80 L750,80 L750,380 L50,380 Z" fill="none" stroke="url(#roadGradient)" strokeWidth="30" strokeLinecap="round" />
+                    
+                    {/* CENTRAL CROSS AXIS ROADS */}
+                    <path d="M400,80 L400,380" fill="none" stroke="url(#roadGradient)" strokeWidth="25" strokeLinecap="round" />
+                    <path d="M200,230 L600,230" fill="none" stroke="url(#roadGradient)" strokeWidth="25" strokeLinecap="round" />
+                    
+                    {/* RESIDENTIAL AREA ACCESS ROAD */}
+                    <path d="M600,80 L600,380" fill="none" stroke="url(#roadGradient)" strokeWidth="25" strokeLinecap="round" />
+                    
+                    {/* SPORTS COMPLEX ACCESS ROAD */}
+                    <path d="M50,380 L200,380 L200,550" fill="none" stroke="url(#roadGradient)" strokeWidth="25" strokeLinecap="round" />
+                    
+                    {/* PARKING ACCESS ROAD */}
+                    <path d="M400,380 L400,550" fill="none" stroke="url(#roadGradient)" strokeWidth="25" strokeLinecap="round" />
+                    
+                    {/* ARTS QUAD ACCESS ROAD */}
+                    <path d="M600,380 L600,550" fill="none" stroke="url(#roadGradient)" strokeWidth="25" strokeLinecap="round" />
                   </g>
 
-                  {/* Water Feature */}
+                  {/* PATHWAY SYSTEM - Same as CampusMap */}
                   <g className="opacity-90">
-                    <circle cx="400" cy="400" r="35" fill="url(#waterGradient)" stroke="#38bdf8" strokeWidth="2" />
-                    <text x="400" y="400" textAnchor="middle" className="font-bold" style={{ fontSize: '9px', fill: '#0c4a6e', fontWeight: 'bold' }}>
-                      POND
-                    </text>
+                    {/* CENTRAL ACADEMIC QUAD PATHWAYS */}
+                    <path d="M200,80 L200,200" fill="none" stroke="url(#pathwayGradient)" strokeWidth="15" strokeLinecap="round" />
+                    <path d="M400,80 L400,200" fill="none" stroke="url(#pathwayGradient)" strokeWidth="15" strokeLinecap="round" />
+                    <path d="M600,80 L600,200" fill="none" stroke="url(#pathwayGradient)" strokeWidth="15" strokeLinecap="round" />
+                    
+                    {/* ACADEMIC BUILDING CONNECTIONS */}
+                    <path d="M215,100 L400,100" fill="none" stroke="url(#pathwayGradient)" strokeWidth="12" strokeLinecap="round" />
+                    <path d="M215,150 L400,150" fill="none" stroke="url(#pathwayGradient)" strokeWidth="12" strokeLinecap="round" />
+                    
+                    {/* LIBRARY QUAD PATHWAYS */}
+                    <path d="M230,230 L230,320" fill="none" stroke="url(#pathwayGradient)" strokeWidth="12" strokeLinecap="round" />
+                    <path d="M230,320 L400,320" fill="none" stroke="url(#pathwayGradient)" strokeWidth="12" strokeLinecap="round" />
+                    
+                    {/* STUDENT LIFE CENTER PATHWAYS */}
+                    <path d="M400,230 L400,320" fill="none" stroke="url(#pathwayGradient)" strokeWidth="14" strokeLinecap="round" />
+                    <path d="M400,320 L600,320" fill="none" stroke="url(#pathwayGradient)" strokeWidth="14" strokeLinecap="round" />
+                    
+                    {/* SPORTS COMPLEX PATHWAYS */}
+                    <path d="M200,230 L200,380" fill="none" stroke="url(#pathwayGradient)" strokeWidth="12" strokeLinecap="round" />
+                    
+                    {/* RESIDENTIAL AREA PATHWAYS */}
+                    <path d="M600,80 L600,230" fill="none" stroke="url(#pathwayGradient)" strokeWidth="14" strokeLinecap="round" />
+                    
+                    {/* ARTS QUAD PATHWAYS */}
+                    <path d="M600,380 L600,480" fill="none" stroke="url(#pathwayGradient)" strokeWidth="14" strokeLinecap="round" />
+                  </g>
+
+                  {/* ROUNDABOUTS & INTERSECTIONS */}
+                  <g>
+                    {/* MAIN ENTRANCE ROUNDABOUT */}
+                    <circle cx="200" cy="80" r="25" fill="#78716c" />
+                    <circle cx="200" cy="80" r="15" fill="#ffffff" />
+                    
+                    {/* CENTRAL INTERSECTION */}
+                    <circle cx="400" cy="80" r="20" fill="#78716c" />
+                    <circle cx="400" cy="80" r="12" fill="#ffffff" />
+                    
+                    {/* LIBRARY QUAD INTERSECTION */}
+                    <circle cx="230" cy="230" r="15" fill="#78716c" />
+                    <circle cx="230" cy="230" r="8" fill="#ffffff" />
+                    
+                    {/* STUDENT LIFE INTERSECTION */}
+                    <circle cx="400" cy="320" r="15" fill="#78716c" />
+                    <circle cx="400" cy="320" r="8" fill="#ffffff" />
+                    
+                    {/* SPORTS COMPLEX INTERSECTION */}
+                    <circle cx="200" cy="380" r="15" fill="#78716c" />
+                    <circle cx="200" cy="380" r="8" fill="#ffffff" />
+                    
+                    {/* RESIDENTIAL AREA INTERSECTION */}
+                    <circle cx="600" cy="230" r="15" fill="#78716c" />
+                    <circle cx="600" cy="230" r="8" fill="#ffffff" />
+                    
+                    {/* ARTS QUAD INTERSECTION */}
+                    <circle cx="600" cy="380" r="15" fill="#78716c" />
+                    <circle cx="600" cy="380" r="8" fill="#ffffff" />
+                  </g>
+
+                  {/* GREEN SPACES */}
+                  <g>
+                    {/* CENTRAL ACADEMIC QUAD */}
+                    <rect x="200" y="80" width="400" height="120" rx="20" fill="#4ade80" fillOpacity="0.4" stroke="#22c55e" strokeWidth="2" />
+                    
+                    {/* LIBRARY GARDEN */}
+                    <rect x="180" y="280" width="150" height="80" rx="15" fill="#86efac" fillOpacity="0.3" stroke="#22c55e" strokeWidth="2" strokeDasharray="4 2" />
+                    
+                    {/* STUDENT LIFE PLAZA */}
+                    <rect x="320" y="280" width="250" height="80" rx="15" fill="#fecaca" fillOpacity="0.2" stroke="#f87171" strokeWidth="2" strokeDasharray="4 2" />
+                    
+                    {/* SPORTS FIELD GREEN */}
+                    <rect x="50" y="430" width="300" height="120" rx="10" fill="#86efac" fillOpacity="0.5" stroke="#16a34a" strokeWidth="2" />
                   </g>
 
                   {/* Buildings */}
-                  {mapBuildings.map(b => (
+                  {buildings.map(b => (
                     <Building 
                       key={b.id} 
                       b={b} 
@@ -791,15 +999,17 @@ const Navigate = ({ onNavigate, buildings }) => {
                   {/* Navigation Path and Marker */}
                   {isNavigating && currentPathPoints.length > 0 && (
                     <g>
+                      {/* Navigation path */}
                       <path
                         d={`M${currentPathPoints.map(p => `${p.x} ${p.y}`).join(' L')}`}
                         fill="none"
                         stroke="#10b981"
-                        strokeWidth="3"
+                        strokeWidth="4"
                         strokeDasharray="8 4"
-                        opacity="0.6"
+                        opacity="0.7"
                       />
                       
+                      {/* User position marker */}
                       <StartPoint 
                           point={userPosition} 
                           isCurrentPosition={true}
@@ -817,25 +1027,33 @@ const Navigate = ({ onNavigate, buildings }) => {
                     />
                   ))}
 
-                  {/* "You Are Here" Marker */}
-                  <g transform="translate(240, 240)" className="animate-pulse">
-                    <circle cx="10" cy="10" r="12" fill="#ef4444" opacity="0.4" />
-                    <circle cx="10" cy="10" r="8" fill="#dc2626" opacity="0.7" />
-                    <circle cx="10" cy="10" r="4" fill="#b91c1c" />
-                    <circle cx="10" cy="10" r="1" fill="white" />
-                    <text x="25" y="15" textAnchor="start" className="font-bold" style={{ fontSize: '10px', fill: '#dc2626', fontWeight: 'bold' }}>
+                  {/* "You Are Here" Marker - Central Quad */}
+                  <g transform="translate(400, 140)" className="animate-pulse">
+                    <circle cx="10" cy="10" r="15" fill="#ef4444" opacity="0.3" />
+                    <circle cx="10" cy="10" r="10" fill="#dc2626" opacity="0.6" />
+                    <circle cx="10" cy="10" r="5" fill="#b91c1c" />
+                    <circle cx="10" cy="10" r="2" fill="white" />
+                    <text x="30" y="15" textAnchor="start" className="font-bold" style={{ fontSize: '11px', fill: '#dc2626', fontWeight: 'bold' }}>
                       YOU ARE HERE
                     </text>
                   </g>
 
-                  {/* Water Gradient Definition */}
-                  <defs>
-                    <linearGradient id="waterGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#7dd3fc" />
-                      <stop offset="50%" stopColor="#38bdf8" />
-                      <stop offset="100%" stopColor="#0ea5e9" />
-                    </linearGradient>
-                  </defs>
+                  {/* ROAD MARKINGS */}
+                  <g className="opacity-90">
+                    {/* Center lines */}
+                    <path d="M50,80 L750,80 L750,380 L50,380 Z" fill="none" stroke="#ffffff" strokeWidth="2" strokeDasharray="10 5" />
+                    <path d="M200,20 L200,80" fill="none" stroke="#ffffff" strokeWidth="2" strokeDasharray="10 5" />
+                    <path d="M400,80 L400,380" fill="none" stroke="#ffffff" strokeWidth="2" strokeDasharray="10 5" />
+                    
+                    {/* Crosswalks */}
+                    <g transform="translate(200, 80)">
+                      <path d="M-20,-8 L-20,8 M-15,-8 L-15,8 M-10,-8 L-10,8 M-5,-8 L-5,8 M0,-8 L0,8 M5,-8 L5,8 M10,-8 L10,8 M15,-8 L15,8 M20,-8 L20,8" 
+                        fill="none" stroke="#ffffff" strokeWidth="2" />
+                    </g>
+                  </g>
+
+                  {/* CAMPUS BOUNDARY */}
+                  <rect x="20" y="20" width="760" height="560" fill="none" stroke="#374151" strokeWidth="2" strokeDasharray="5 5" />
                 </svg>
               </div>
 
@@ -879,7 +1097,7 @@ const Navigate = ({ onNavigate, buildings }) => {
                 <div className="mt-6">
                     <h3 className="font-bold text-gray-900 text-lg mb-4">Popular Destinations</h3>
                     <div className="grid grid-cols-2 gap-4">
-                        {mapBuildings.slice(0, 4).map((building, index) => (
+                        {buildings.slice(0, 4).map((building, index) => (
                             <button
                                 key={index}
                                 onClick={() => handleInputChange('destination', building.name)}
