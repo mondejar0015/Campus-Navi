@@ -20,7 +20,7 @@ const CampusMap = ({ onNavigate, user, onLogout }) => {
   const MIN_SCALE = 0.6;
   const MAX_SCALE = 3;
 
-  // --- MATCHING MASTER PLAN LAYOUT ---
+  // --- STANDARDIZED MAP DATA ---
   const campusZones = {
     entrance: { x: 300, y: 10, width: 200, height: 80, label: 'MAIN ENTRANCE', color: '#ef4444' },
     administration: { x: 40, y: 100, width: 180, height: 140, label: 'ADMINISTRATION', color: '#7e22ce' },
@@ -107,7 +107,7 @@ const CampusMap = ({ onNavigate, user, onLogout }) => {
 
                      {/* ROADS */}
                      <g className="opacity-90">
-                        <path d="M20,90 L780,90 L780,590 L20,590 Z" fill="none" stroke="url(#roadGradient)" strokeWidth="25" strokeLinecap="round" />
+                        <path d="M20,90 L780,90 L780,590 L20,590 Z" fill="none" stroke="url(#roadGradient)" strokeWidth="25" strokeLinecap="round" strokeLinejoin="round" />
                         <path d="M230,90 L230,590" fill="none" stroke="url(#roadGradient)" strokeWidth="18" />
                         <path d="M570,90 L570,590" fill="none" stroke="url(#roadGradient)" strokeWidth="18" />
                         <path d="M20,250 L230,250" fill="none" stroke="url(#roadGradient)" strokeWidth="15" />
@@ -127,13 +127,13 @@ const CampusMap = ({ onNavigate, user, onLogout }) => {
                      {/* BUILDINGS */}
                      {mapBuildings.filter(b => b.name.toLowerCase().includes(searchQuery.toLowerCase())).map(b => (
                        <g key={b.id} onClick={() => handleBuildingClick(b)} className={`cursor-pointer transition-all hover:drop-shadow-lg ${activeBuilding === b.name ? 'opacity-100 drop-shadow-lg' : 'opacity-90'}`}>
-                         <rect x={b.x} y={b.y} width={b.width} height={b.height} rx="8" fill="white" stroke={activeBuilding === b.name ? '#10b981' : '#e5e7eb'} strokeWidth="2" />
-                         <rect x={b.x} y={b.y} width={b.width} height={b.height * 0.3} rx="8" fill={activeBuilding === b.name ? '#10b981' : b.color} fillOpacity="0.9" />
-                         <text x={b.x + b.width/2} y={b.y + b.height/2 + 2} textAnchor="middle" className="font-bold pointer-events-none" style={{ fontSize: '10px', fill: '#1f2937' }}>{b.label}</text>
+                         <rect x={b.x} y={b.y} width={b.width} height={b.height} rx="4" fill="white" stroke={activeBuilding === b.name ? '#10b981' : b.color} strokeWidth="1" />
+                         <rect x={b.x} y={b.y} width={b.width} height={b.height * 0.3} rx="4" fill={activeBuilding === b.name ? '#10b981' : b.color} fillOpacity="0.8" />
+                         <text x={b.x + b.width/2} y={b.y + b.height/2 + 2} textAnchor="middle" className="font-bold pointer-events-none" style={{ fontSize: '9px', fill: '#1f2937' }}>{b.label}</text>
                        </g>
                      ))}
 
-                     {/* YOU ARE HERE */}
+                     {/* YOU ARE HERE (STATIC FOR MAP VIEW) */}
                      <g transform="translate(400, 180)" className="animate-pulse">
                        <circle cx="10" cy="10" r="15" fill="#ef4444" opacity="0.3" /><circle cx="10" cy="10" r="10" fill="#dc2626" opacity="0.6" /><circle cx="10" cy="10" r="5" fill="#b91c1c" /><circle cx="10" cy="10" r="2" fill="white" />
                        <text x="30" y="15" textAnchor="start" className="font-bold" style={{ fontSize: '11px', fill: '#dc2626' }}>YOU ARE HERE</text>

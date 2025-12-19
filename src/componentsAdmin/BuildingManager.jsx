@@ -47,24 +47,15 @@ const BuildingManager = ({ onNavigate, user }) => {
     { value: 'facility', label: 'Facility/Utility' },
   ];
 
-  // --- NEW MASTER PLAN LAYOUT (Non-Overlapping) ---
+  // --- STANDARDIZED MAP DATA ---
   const campusZones = {
-    // Top Section
     entrance: { x: 300, y: 10, width: 200, height: 80, label: 'MAIN ENTRANCE', color: '#ef4444' },
-    
-    // West Wing (Left)
     administration: { x: 40, y: 100, width: 180, height: 140, label: 'ADMINISTRATION', color: '#7e22ce' },
     library: { x: 40, y: 260, width: 180, height: 120, label: 'LIBRARY DISTRICT', color: '#2563eb' },
-    
-    // Central Core (Middle)
     academic: { x: 240, y: 110, width: 320, height: 220, label: 'ACADEMIC CORE', color: '#1e40af' },
     student_life: { x: 240, y: 350, width: 320, height: 100, label: 'STUDENT PLAZA', color: '#dc2626' },
-    
-    // East Wing (Right)
     arts: { x: 580, y: 100, width: 180, height: 140, label: 'ARTS & CULTURE', color: '#db2777' },
     residential: { x: 580, y: 260, width: 180, height: 300, label: 'RESIDENTIAL VILLAGE', color: '#ea580c' },
-    
-    // South Complex (Bottom)
     sports: { x: 40, y: 400, width: 180, height: 180, label: 'SPORTS COMPLEX', color: '#059669' },
     parking: { x: 240, y: 470, width: 320, height: 110, label: 'MAIN PARKING', color: '#4b5563' }
   };
@@ -345,9 +336,10 @@ const BuildingManager = ({ onNavigate, user }) => {
 
                       {/* --- 4. EXISTING BUILDINGS (Ghosts) --- */}
                       {buildings.filter(b => b.id !== editingId).map(b => (
-                         <g key={b.id} opacity="0.7">
-                            <rect x={b.coordinates?.x||0} y={b.coordinates?.y||0} width={b.coordinates?.width||50} height={b.coordinates?.height||50} fill={b.color} rx="4" stroke="white" strokeWidth="1" />
-                            <text x={(b.coordinates?.x||0)+(b.coordinates?.width||0)/2} y={(b.coordinates?.y||0)+(b.coordinates?.height||0)/2} textAnchor="middle" fontSize="9" fill="white" fontWeight="bold" style={{pointerEvents:'none'}}>{b.building_code}</text>
+                         <g key={b.id} opacity="0.8">
+                            <rect x={b.coordinates?.x||0} y={b.coordinates?.y||0} width={b.coordinates?.width||50} height={b.coordinates?.height||50} fill="white" stroke={b.color} strokeWidth="1" rx="4" />
+                            <rect x={b.coordinates?.x||0} y={b.coordinates?.y||0} width={b.coordinates?.width||50} height={(b.coordinates?.height||50)*0.3} fill={b.color} rx="4" />
+                            <text x={(b.coordinates?.x||0)+(b.coordinates?.width||0)/2} y={(b.coordinates?.y||0)+(b.coordinates?.height||0)/2+5} textAnchor="middle" fontSize="9" fill="#1f2937" fontWeight="bold" style={{pointerEvents:'none'}}>{b.building_code}</text>
                          </g>
                       ))}
 
